@@ -1,0 +1,9 @@
+{
+    "id"    : "getNotificationInfo",
+    "type"  : "object",
+    "properties" : {
+        "sourceId" : {"type" : "string", "optional" : true},
+        "all" : {"type" : "boolean"}
+    },
+    "required": ["all"]
+}

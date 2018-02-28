@@ -1,0 +1,8 @@
+{
+    "id"    : "removeRemoteNotification",
+    "type"  : "object",
+    "properties" : {
+        "removeRemoteNotiId" : {"type" : "array","optional": true},
+        "remotePackageName" : {"type": "string","optional": true}
+    }
+}

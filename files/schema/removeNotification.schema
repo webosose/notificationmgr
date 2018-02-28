@@ -1,0 +1,8 @@
+{
+    "id"    : "removeNotification",
+    "type"  : "object",
+    "properties" : {
+        "removeNotiId" : {"type" : "array","optional": true},
+        "sourceId" : {"type": "string","optional": true}
+    }
+}

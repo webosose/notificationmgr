@@ -1,0 +1,287 @@
+{
+    "id":"com.webos.notificationhistory:1",
+    "owner":"com.webos.notification",
+    "indexes":[
+        {"name":"timestamp", "props":[{"name":"timestamp"}]},
+        {"name":"revision", "props":[{"name":"_rev"}]},
+        {"name":"sourceId", "props":[{"name":"sourceId"}]},
+        {"name":"expire", "props":[{"name":"schedule.expire"}]},
+        {"name":"scheduleExpireAndTimestamp", "props":[{"name":"schedule.expire"},{"name":"timestamp"}]},
+        {
+            "name": "notiId",
+            "props": [
+                {
+                    "name": "notiId"
+                }
+            ]
+        },
+        {
+            "name": "iconUrl",
+            "props": [
+                {
+                    "name": "iconUrl"
+                }
+            ]
+        },
+        {
+            "name": "title",
+            "props": [
+                {
+                    "name": "title"
+                }
+            ]
+        },
+        {
+            "name": "message",
+            "props": [
+                {
+                    "name": "message"
+                }
+            ]
+        },
+        {
+            "name": "autoRemove",
+            "props": [
+                {
+                    "name": "autoRemove"
+                }
+            ]
+        },
+        {
+            "name": "onClick",
+            "props": [
+                {
+                    "name": "onClick"
+                }
+            ]
+        },
+        {
+            "name": "params",
+            "props": [
+                {
+                    "name": "params"
+                }
+            ]
+        },
+        {
+            "name": "forceLcdTurnOn",
+            "props": [
+                {
+                    "name": "forceLcdTurnOn"
+                }
+            ]
+        },
+        {
+            "name": "needSoundPlay",
+            "props": [
+                {
+                    "name": "needSoundPlay"
+                }
+            ]
+        },
+        {
+            "name": "forceSoundPlay",
+            "props": [
+                {
+                    "name": "forceSoundPlay"
+                }
+            ]
+        },
+        {
+            "name": "soundUri",
+            "props": [
+                {
+                    "name": "soundUri"
+                }
+            ]
+        },
+        {
+            "name": "isRawSound",
+            "props": [
+                {
+                    "name": "isRawSound"
+                }
+            ]
+        },
+        {
+            "name": "needToShowPopup",
+            "props": [
+                {
+                    "name": "needToShowPopup"
+                }
+            ]
+        },
+        {
+            "name": "isRemoteNotification",
+            "props": [
+                {
+                    "name": "isRemoteNotification"
+                }
+            ]
+        },
+        {
+            "name": "isUnDeletable",
+            "props": [
+                {
+                    "name": "isUnDeletable"
+                }
+            ]
+        },
+        {
+            "name": "removeAll",
+            "props": [
+                {
+                    "name": "isUnDeletable"
+                },
+                {
+                    "name": "timestamp"
+                }
+            ]
+        },
+        {
+            "name": "isSysReq",
+            "props": [
+                {
+                    "name": "isSysReq"
+                }
+            ]
+        },
+        {
+            "name": "remoteSourceId",
+            "props": [
+                {
+                    "name": "remoteSourceId"
+                }
+            ]
+        },
+        {
+            "name": "remoteNotiId",
+            "props": [
+                {
+                    "name": "remoteNotiId"
+                }
+            ]
+        },
+        {
+            "name": "remotePackageName",
+            "props": [
+                {
+                    "name": "remotePackageName"
+                }
+            ]
+        },
+        {
+            "name": "remoteTitle",
+            "props": [
+                {
+                    "name": "remoteTitle"
+                }
+            ]
+        },
+        {
+            "name": "remoteMessage",
+            "props": [
+                {
+                    "name": "remoteMessage"
+                }
+            ]
+        },
+        {
+            "name": "remoteTickerText",
+            "props": [
+                {
+                    "name": "remoteTickerText"
+                }
+            ]
+        },
+        {
+            "name": "remoteId",
+            "props": [
+                {
+                    "name": "remoteId"
+                }
+            ]
+        },
+        {
+            "name": "remoteUserId",
+            "props": [
+                {
+                    "name": "remoteUserId"
+                }
+            ]
+        },
+        {
+            "name": "remotePostTime",
+            "props": [
+                {
+                    "name": "remotePostTime"
+                }
+            ]
+        },
+        {
+            "name": "remoteAppName",
+            "props": [
+                {
+                    "name": "remoteAppName"
+                }
+            ]
+        },
+        {
+            "name": "remoteIconUrl",
+            "props": [
+                {
+                    "name": "remoteIconUrl"
+                }
+            ]
+        },
+        {
+            "name": "remoteBgImage",
+            "props": [
+                {
+                    "name": "remoteBgImage"
+                }
+            ]
+        },
+        {
+            "name": "remoteActionParam",
+            "props": [
+                {
+                    "name": "remoteActionParam"
+                }
+            ]
+        },
+        {
+            "name": "saveRemoteNotification",
+            "props": [
+                {
+                    "name": "saveRemoteNotification"
+                }
+            ]
+        },
+        {
+            "name": "groupId",
+            "props": [
+                {
+                    "name": "groupId"
+                }
+            ]
+        },
+        {
+            "name": "notificationType",
+            "props": [
+                {
+                    "name": "notificationType"
+                }
+            ]
+        },
+        {
+            "name": "pageNumber",
+            "props": [
+                {
+                    "name": "pageNumber"
+                }
+            ]
+        }
+    ],
+    "sync":true
+}

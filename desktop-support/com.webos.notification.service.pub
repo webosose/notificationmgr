@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=com.webos.notification
+Exec=/usr/lib/luna/notification
+Type=static

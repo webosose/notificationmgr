@@ -1,0 +1,6 @@
+.project
+.cproject
+patches/
+BUILD*/
+build/
+mock/

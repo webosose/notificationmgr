@@ -1,0 +1,12 @@
+{
+    "id"    : "closeToast",
+    "type"  : "object",
+    "properties" : {
+        "toastId" : {
+            "type" : "string"
+        },
+        "sourceId" : {
+            "type" : "string"
+        }
+    }
+}

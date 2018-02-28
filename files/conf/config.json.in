@@ -1,0 +1,5 @@
+{
+	"DisableThreasholdTimer": 120,
+	"RetentionPeriod": 30,
+	"NotificationAggregator":["com.lge.service.push"]
+}

@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=com.webos.notification
+Exec=@WEBOS_INSTALL_SBINDIR@/notificationmgr
+Type=static

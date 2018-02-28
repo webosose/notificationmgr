@@ -1,0 +1,5 @@
+{
+    "id"    : "disable",
+    "type"  : "object",
+    "properties" : {}
+}

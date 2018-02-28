@@ -1,0 +1,16 @@
+{
+    "id"    : "createPincodePrompt",
+    "type"  : "object",
+    "properties" : {
+        "promptType": {
+            "type" : "string"
+        },
+        "appId": {
+            "type" : "string"
+        },
+        "message": {
+            "type" : "string"
+        }
+    },
+    "required": ["promptType"]
+}

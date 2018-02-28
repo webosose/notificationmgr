@@ -1,0 +1,13 @@
+[
+	{
+		"type": "db.kind",
+		"object": "com.webos.notificationhistory:1",
+		"caller": "com.webos.app.notificationcenter",
+		"operations": {
+			"create": "allow",
+			"read": "allow",
+			"update": "allow",
+			"delete": "allow"
+		}
+	}
+]

@@ -1,0 +1,5 @@
+{
+    "com.webos.notification": [
+         "networking", "settings", "applications", "system", "database", "tv.settings"
+    ]
+}

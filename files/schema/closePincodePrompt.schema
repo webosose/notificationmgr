@@ -1,0 +1,16 @@
+{
+    "id"    : "closePincodePrompt",
+    "type"  : "object",
+    "properties" : {
+        "pincode": {
+            "type" : "string"
+        },
+        "closeType": {
+            "type" : "string"
+        },
+        "mode": {
+            "type" : "string"
+        }
+    },
+    "required": [ "closeType"]
+}

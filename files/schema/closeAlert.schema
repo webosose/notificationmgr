@@ -1,0 +1,10 @@
+{
+    "id"    : "closeAlert",
+    "type"  : "object",
+    "properties" : {
+        "alertId" : {
+            "type" : "string"
+        }
+    },
+    "required": [ "alertId" ]
+}

@@ -1,0 +1,5 @@
+{
+    "id"    : "enable",
+    "type"  : "object",
+    "properties" : {}
+}

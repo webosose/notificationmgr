@@ -1,0 +1,96 @@
+{
+    "id"    : "createAlert",
+    "type"  : "object",
+    "properties" : {
+        "iconUrl" : {
+            "type" : "string"
+        },
+        "title" : {
+            "type" : "string"
+        },
+        "message" : {
+            "type" : "string"
+        },
+        "modal": {
+            "type" : "boolean"
+        },
+        "autoTimeout" : {
+            "type" : "number"
+        },
+        "type": {
+            "type": "string",
+            "optional": true,
+            "enum": [
+                "confirm",
+                "warning",
+                "battery"
+            ]
+        },
+        "buttons" : {
+            "type" : "array",
+            "items" : {
+                "type": "object",
+                "properties": {
+                    "buttonType": {
+                        "type": "string",
+                        "enum": [
+                            "ok",
+                            "cancel"
+                        ],
+                        "optional": true
+                    },
+                    "label" : {
+                        "type" : "string"
+                    },
+                    "onclick" : {
+                        "type" : "string"
+                    },
+                    "onClick": {
+                        "type": "string"
+                    },
+                    "params" : {
+                        "type" : "object"
+                    },
+                    "focus" : {
+                        "type" : "boolean",
+                        "default" : false,
+                        "description" : "Set to true if button has default focus"
+                    }
+                }
+            }
+        },
+        "isSysReq": {
+            "type": "boolean",
+            "optional": true
+        },
+        "onclose" : {
+            "type" : "object",
+            "description" : "Defines closed alert action",
+            "properties": {
+                "uri" : {
+                    "type": "string",
+                    "description": "Uri to be called when alert is closed"
+                },
+                "params" : {
+                    "type": "object",
+                    "description": "Parameters to be passed when uri is called"
+                }
+            }
+        },
+        "onfail" : {
+            "type" : "object",
+            "description" : "Defines failed alert action",
+            "properties": {
+                "uri" : {
+                    "type": "string",
+                    "description": "Uri to be called when failed to create alert"
+                },
+                "params" : {
+                    "type": "object",
+                    "description": "Parameters to be passed when uri is called"
+                }
+            }
+        }
+    },
+    "required": [ "message", "buttons"]
+}

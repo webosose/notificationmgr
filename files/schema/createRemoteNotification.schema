@@ -1,0 +1,31 @@
+{
+    "id"    : "createRemoteNotification",
+    "type"  : "object",
+    "properties" : {
+        "remoteSourceId" : {"type" : "string", "optional" : true},
+        "parentNotiId" : {"type" : "string", "optional" : true},
+        "remotePackageName" : {"type" : "string"},
+        "remoteTitle" : {"type" : "string", "optional" : true},
+        "remoteMessage" : {"type" : "string", "optional" : true},
+        "remoteTickerText" : {"type" : "string", "optional" : true},
+        "remoteId" : {"type" : "number", "optional" : true},
+        "remoteUserId" : {"type" : "number", "optional" : true},
+        "remotePostTime" : {"type" : "number", "optional" : true},
+        "remoteAppName" : {"type" : "string", "optional" : true},
+        "remoteIconUrl" : {"type" : "string", "optional" : true},
+        "remoteBgImage" : {"type" : "string", "optional" : true},
+        "remoteActionParam" : {"type" : "array", "optional" : true},
+        "isUnDeletable" : {"type" : "boolean", "optional" : true},
+        "isRemoteNotification" : {"type" : "boolean", "optional" : true},
+        "groupId" : {"type" : "string", "optional" : true},
+        "notificationType" : {"type" : "string", "optional" : true},
+        "pageNumber" : {"type" : "number", "optional" : true},
+        "remoteSubText" : {"type" : "string", "optional" : true},
+        "remoteCount" : {"type" : "number", "optional" : true},
+        "remoteTag" : {"type" : "string", "optional" : true},
+        "remoteResultKey" : {"type" : "string", "optional" : true},
+        "remoteAlert" : {"type" : "boolean", "optional" : true},
+        "enhancedNotification" : {"type" : "string", "optional" : true}
+    },
+    "required": ["remotePackageName","remoteAppName", "remoteMessage"]
+}

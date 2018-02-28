@@ -1,0 +1,88 @@
+{
+    "id"    : "createToast",
+    "type"  : "object",
+    "properties" : {
+        "sourceId" : {
+            "type" : "string"
+        },
+        "iconUrl" : {
+            "type" : "string"
+        },
+        "title": {
+            "type": "string",
+            "optional": true
+        },
+        "message" : {
+            "type" : "string"
+        },
+        "onclick" : {
+            "type" : "object",
+            "properties" : {
+                "appId" : {
+                    "type" : "string"
+                },
+                "params" : {
+                    "type" : "object"
+                },
+                "target" : {
+                    "type" : "string"
+                }
+            }
+        },
+        "noaction" : {
+            "type" : "boolean"
+        },
+        "stale" : {
+            "type" : "boolean"
+        },
+        "persistent" : {
+            "type" : "boolean"
+        },
+        "onlyToast": {
+            "type": "boolean",
+            "optional": true
+        },
+        "isSysReq": {
+            "type": "boolean",
+            "optional": true
+        },
+        "schedule" : {
+            "type" : "object",
+            "description" : "Defines the persistent message schedule",
+            "properties" : {
+                "expire" : {
+                    "type" : "number",
+                    "minimum" : 0,
+                    "exclusiveMinimum" : true,
+                    "description" : "If this field is set, message is removed by automatically when current time has been passed. This value represents the number of seconds since 00:00 hours, Jan 1, 1970 UTC."
+                }
+            }
+        },
+        "type": {
+            "type" : "string",
+            "description" : "Defines the toast type",
+            "enum" : [ "standard", "light" ],
+            "default" : "standard"
+        },
+        "extra": {
+            "type" : "object",
+            "description" : "Defines extra toast resource",
+            "properties": {
+                "image": {
+                    "type": "array",
+                    "description": "Defines extra toast image",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "uri": {
+                                "type": "string",
+                                "description": "Image resource uri"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "required": ["message"]
+}

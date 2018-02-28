@@ -1,0 +1,57 @@
+{
+    "id"    : "createInputAlert",
+    "type"  : "object",
+    "properties" : {
+        "appId" : {
+            "type" : "string"
+        },
+        "portType" : {
+            "type" : "string"
+        },
+        "portName" : {
+            "type" : "string"
+        },
+        "portIcon" : {
+            "type" : "string"
+        },
+        "deviceName" : {
+            "type" : "string"
+        },
+        "deviceIcon" : {
+            "type" : "string"
+        },
+        "params" : {
+            "type" : "object"
+        },
+        "inputs" : {
+            "type" : "array",
+            "description" : "Contains input alert informations",
+            "items" : {
+                "type" : "object",
+                "properties" : {
+                    "appId" : {
+                        "type" : "string"
+                    },
+                    "portType" : {
+                        "type" : "string"
+                    },
+                    "portName" : {
+                        "type" : "string"
+                    },
+                    "deviceName" : {
+                        "type" : "string"
+                    },
+                    "deviceIcon" : {
+                        "type" : "string"
+                    },
+                    "params" : {
+                        "type" : "object"
+                    }
+                }
+            }
+        },
+        "timeout" : {
+            "type" : "number"
+        }
+    }
+}

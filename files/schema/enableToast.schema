@@ -1,0 +1,10 @@
+{
+    "id"    : "enableToast",
+    "type"  : "object",
+    "properties" : {
+        "source" : {
+            "type" : "string"
+        }
+    },
+   "additionalProperties": false
+}

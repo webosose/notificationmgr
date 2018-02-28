@@ -1,0 +1,9 @@
+{
+    "id"    : "getRemoteNotificationInfo",
+    "type"  : "object",
+    "properties" : {
+        "remotePackageName" : {"type" : "string", "optional" : true},
+        "all" : {"type" : "boolean"}
+    },
+    "required": ["all"]
+}

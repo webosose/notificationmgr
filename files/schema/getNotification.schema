@@ -1,0 +1,10 @@
+{
+    "id"    : "getToastNotification",
+    "type"  : "object",
+    "properties" : {
+        "subscribe" : {
+            "type" : "boolean"
+        }
+    },
+   "additionalProperties": false
+}

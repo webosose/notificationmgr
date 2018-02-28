@@ -1,0 +1,37 @@
+{
+        "notifications.manage": [
+                "com.webos.notification/createNotification",
+                "com.webos.notification/createToast",
+                "com.webos.notification/removeNotification"
+        ],
+        "notifications.query": [
+                "com.webos.notification/getNotification",
+                "com.webos.notification/getNotificationInfo",
+                "com.webos.notification/getRemoteNotificationInfo"
+        ],
+        "notifications": [
+                "com.webos.notification/closeAlert",
+                "com.webos.notification/closeAllAlerts",
+                "com.webos.notification/closeInputAlert",
+                "com.webos.notification/closePincodePrompt",
+                "com.webos.notification/closeToast",
+                "com.webos.notification/createAlert",
+                "com.webos.notification/createInputAlert",
+                "com.webos.notification/createNotification",
+                "com.webos.notification/createPincodePrompt",
+                "com.webos.notification/createToast",
+                "com.webos.notification/disableToast",
+                "com.webos.notification/enableToast",
+                "com.webos.notification/getAlertNotification",
+                "com.webos.notification/getInputAlertNotification",
+                "com.webos.notification/getNotification",
+                "com.webos.notification/getNotificationInfo",
+                "com.webos.notification/getPincodePromptNotification",
+                "com.webos.notification/getToastNotification",
+                "com.webos.notification/removeAllNotification",
+                "com.webos.notification/removeNotification",
+                "com.webos.notification/enable",
+                "com.webos.notification/disable",
+                "com.webos.notification/createSignageAlert"
+        ]
+}

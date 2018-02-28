@@ -1,0 +1,14 @@
+{
+    "role": {
+        "exeName":"/usr/lib/luna/notification",
+        "type": "privileged",
+        "allowedNames": ["", "com.webos.notification"]
+    },
+    "permissions": [
+        {
+            "service":"com.webos.notification",
+            "inbound":["*"],
+            "outbound":["*"]
+        }
+    ]
+}

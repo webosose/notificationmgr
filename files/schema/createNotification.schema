@@ -1,0 +1,23 @@
+{
+    "id"    : "createNotification",
+    "type"  : "object",
+    "properties" : {
+        "sourceId" : {"type" : "string", "optional" : true},
+        "iconUrl" : {"type" : "string", "optional" : true},
+        "title" : {"type" : "string", "optional" : true},
+        "message" : {"type" : "string"},
+        "autoRemove" : {"type" : "boolean", "optional" : true},
+        "onClick" : {"type" : "string", "optional" : true},
+        "params" : {"type" : "object", "optional" : true},
+        "forceLcdTurnOn" : {"type" : "boolean", "optional" : true},
+        "needSoundPlay" : {"type" : "boolean", "optional" : true},
+        "forceSoundPlay" : {"type" : "boolean", "optional" : true},
+        "soundUri" : {"type" : "string", "optional" : true},
+        "isRawSound" : {"type" : "boolean", "optional" : true},
+        "needToShowPopup" : {"type" : "boolean", "optional" : true},
+        "isRemoteNotification" : {"type" : "boolean", "optional" : true},
+        "isUnDeletable" : {"type" : "boolean", "optional" : true},
+        "isSysReq" : {"type" : "boolean", "optional" : true}
+    },
+    "required": ["message"]
+}

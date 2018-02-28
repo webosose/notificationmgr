@@ -1,0 +1,20 @@
+{
+    "exeName":"@WEBOS_INSTALL_SBINDIR@/notificationmgr",
+    "type": "regular",
+    "allowedNames": ["com.webos.notification"],
+    "permissions": [
+        {
+            "service":"com.webos.notification",
+            "outbound":[
+                "com.palm.bus",
+                "com.webos.settingsservice",
+                "com.palm.db",
+                "com.webos.service.tv.systemproperty",
+                "com.palm.systemservice",
+                "com.webos.applicationManager",
+                "com.webos.appinstaller"
+            ]
+        }
+    ]
+}
+
