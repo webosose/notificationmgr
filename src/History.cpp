@@ -21,8 +21,6 @@
 #include "JUtil.h"
 #include "Logging.h"
 #include "SystemTime.h"
-#include "PowerStatus.h"
-
 #include <string>
 #include <pbnjson.hpp>
 
@@ -41,10 +39,6 @@ History::History()
 
     m_connSystemTimeSync = SystemTime::instance().sigSync.connect(
         std::bind(&History::onSystemTimeSync, this, _1)
-    );
-
-    m_connBootStatus = PowerStatus::instance().sigBoot.connect(
-        std::bind(&History::onBoot, this, _1)
     );
 }
 
@@ -69,13 +63,12 @@ void History::saveMessage(pbnjson::JValue msg)
 	pbnjson::JValue payload = pbnjson::Object();
 
 	pbnjson::JValue scheduleInMsg = msg["schedule"];
-
-    if(scheduleInMsg.isNull()) 
-    {
-        pbnjson::JValue schedule = pbnjson::Object();
-        schedule.put("expire", MAX_TIMESTAMP);
-        msg.put("schedule", schedule);
-    }
+        if(scheduleInMsg.isNull()) 
+        {
+         pbnjson::JValue schedule = pbnjson::Object();
+         schedule.put("expire", MAX_TIMESTAMP);
+         msg.put("schedule", schedule);
+        }
 
 	//Add kind to the object
 	msg.put("_kind", DB8_KIND);
@@ -137,7 +130,6 @@ bool History::selectMessage(LSHandle* lshandle, const std::string& id, LSMessage
     }
     g_free (query);
     LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d]", __FUNCTION__, __LINE__);
-	
     return true;    
 }
 

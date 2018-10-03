@@ -72,7 +72,6 @@ public:
     static bool cb_removeAllNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_getNotificationInfo(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_getRemoteNotificationInfo(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_createSignageAlert(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_launch(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool parseDoc(const char *docname);
 

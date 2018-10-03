@@ -59,21 +59,21 @@ void Settings::loadSettings()
 	pbnjson::JValue sData;
 	JUtil::Error error;
 
-    settingsData = Utils::readFile(s_settingsFile);
+        settingsData = Utils::readFile(s_settingsFile);
 	if(settingsData)
 	{
 	    sData = JUtil::parse(settingsData, "", &error);
-        delete[] settingsData;
-        if (sData.isNull()) {
+            delete[] settingsData;
+            if (sData.isNull()) {
         	LOG_WARNING(MSGID_SETTINGS_DATA_EMPTY, 0, "Settings data is empty in %s", __PRETTY_FUNCTION__ );
             return;
         }
 	}
-    else
-    {
-    	LOG_WARNING(MSGID_SETTINGS_FILE_LOAD_FAILED, 0, "Unable to load settings in %s", __PRETTY_FUNCTION__ );
-		return;
-    }
+        else
+        {
+    	   LOG_WARNING(MSGID_SETTINGS_FILE_LOAD_FAILED, 0, "Unable to load settings in %s", __PRETTY_FUNCTION__ );
+	   return;
+        }
 
 	int threshold = sData["DisableThreasholdTimer"].asNumber<int32_t>();
 	if(threshold > 0)
@@ -99,15 +99,6 @@ void Settings::loadSettings()
 	bool result;
 	LSError lsError;
 	LSErrorInit(&lsError);
-
-	result = LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/signal/registerServerStatus",
-							"{\"serviceName\":\"com.webos.service.tv.systemproperty\", \"subscribe\":true}",Settings::cbTVServiceBusStatusNotification, this, NULL, &lsError);
-	if (!result) {
-		LOG_DEBUG("unable to register for TV service status");
-		LSErrorPrint (&lsError, stderr);
-		LSErrorFree (&lsError);
-	}
-
 	result = LSCall(NotificationService::instance()->getHandle(),
 					"palm://com.palm.bus/signal/registerServerStatus",
 					"{\"serviceName\":\"com.webos.settingsservice\", \"subscribe\":true}",
@@ -117,33 +108,6 @@ void Settings::loadSettings()
 		LSErrorPrint (&lsError, stderr);
 		LSErrorFree (&lsError);
 	}
-}
-
-bool Settings::cbTVServiceBusStatusNotification(LSHandle* lshandle, LSMessage *message, void *user_data)
-{
-	LSErrorSafe lserror;
-	pbnjson::JValue request;
-	JUtil::Error error;
-
-	request = JUtil::parse(LSMessageGetPayload(message), "", &error);
-
-	if(request.isNull())
-	{
-		LOG_WARNING(MSGID_ET_PARSE_FAIL, 0, "Parsing Error in %s", __PRETTY_FUNCTION__ );
-		return false;
-	}
-
-	if(request["connected"].asBool())
-	{
-		//the tv service is on the bus...
-		 if (LSCall(NotificationService::instance()->getHandle(),"palm://com.webos.service.tv.systemproperty/getProperties",
-						"{\"keys\":[\"substrateMode\", \"powerOnlyMode\", \"instopCompleted\"], \"subscribe\":true}",
-						Settings::cbGetSystemProperties,NULL,NULL, &lserror) == false) {
-			LOG_DEBUG("Get Substrate Mode call failed");
-		}
-	}
-
-	return true;
 }
 
 bool Settings::cbSystemSettingsStatusNotification(LSHandle* lshandle, LSMessage *message, void *user_data)

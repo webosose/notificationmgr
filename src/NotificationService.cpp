@@ -29,7 +29,6 @@
 #include "LSUtils.h"
 #include "UiStatus.h"
 #include "SystemTime.h"
-#include "PowerStatus.h"
 #include "JsonParser.h"
 #include "PincodeValidator.h"
 
@@ -68,7 +67,6 @@ static LSMethod s_methods[] =
     { "removeNotification", NotificationService::cb_removeNotification},
     { "createInputAlert", NotificationService::cb_createInputAlert},
     { "closeInputAlert", NotificationService::cb_closeInputAlert},
-    { "createSignageAlert", NotificationService::cb_createSignageAlert},
     { "getToastNotification", NotificationService::cb_getNotification},
     { "getAlertNotification", NotificationService::cb_getNotification},
     { "getInputAlertNotification", NotificationService::cb_getNotification},
@@ -146,9 +144,8 @@ bool NotificationService::attach(GMainLoop *gml)
 	AppList::instance();
 	Settings::instance();
 
-	SystemTime::instance().startSync(); //BreadnutMergeTODO:Not needed for wearable
-	PowerStatus::instance().startMonitor();
-	History::instance(); // for connect SystemTime sync signal //BreadnutMergeTODO:Not needed for wearable
+	SystemTime::instance().startSync();
+	History::instance();
 
 	return true;
 }
@@ -266,7 +263,7 @@ bool NotificationService::cb_getNotification(LSHandle* lshandle, LSMessage *msg,
 	if(success && subscribeUI)
 	{
             json.put("subscribed", true);
-            Utils::async([=] { UiStatus::instance().enable(UiStatus::ENABLE_UI); }); //BreadnutMergeTODO:Not needed for wearable
+            Utils::async([=] { UiStatus::instance().enable(UiStatus::ENABLE_UI); });
             NotificationService::instance()->setUIEnabled(true);
 	        NotificationService::instance()->processNotiMsgQueue();
 	        NotificationService::instance()->processAlertMsgQueue();
@@ -861,7 +858,7 @@ bool NotificationService::cb_createAlert(LSHandle* lshandle, LSMessage *msg, voi
 	std::string onclickString;
 	std::string oncloseString;
 	std::string buttonLabel;
-	std::string clickSchemaString; // to take care of onclick (for TV) and onClick(for wearable)field in schema 
+	std::string clickSchemaString;
 
     std::string alertType;
     std::string buttonIconPath;
@@ -3737,121 +3734,6 @@ Done:
 }
 
 
-//->Start of API documentation comment block
-/**
-@page com_webos_notification com.webos.notification
-@{
-@section com_webos_notification_createSignageAlert createSignageAlert
-
-Tv Service call this api to create signage alert to display scrolling text on Signage.
-
-@par Parameters
-Name | Required | Type | Description
------|----------|------|------------
-path | yes  | String | path of the XML file
-
-@par Returns(Call)
-Name | Required | Type | Description
------|----------|------|------------
-returnValue | yes | Boolean | True
-
-@par Returns(Subscription)
-None
-@}
-*/
-//->End of API documentation comment block
-
-bool NotificationService::cb_createSignageAlert(LSHandle* lshandle, LSMessage *msg, void *user_data)
-{
-    LSErrorSafe lserror;
-    pbnjson::JValue request;
-    std::string path;
-    std::string errorText;
-    JUtil::Error error;
-    request = JUtil::parse(LSMessageGetPayload(msg), "", &error);
-
-    if(request.isNull()){
-        errorText = "'path' is a required parameter";
-    }
-    else
-    {
-        path = request["path"].asString();
-        if((0 == path.length()) || (0 != access(path.c_str(), F_OK))){
-            LOG_WARNING(MSGID_PATH_MISSING, 0, "Unable to extract path %s", __PRETTY_FUNCTION__);
-            errorText = "'path' is missing Or Invalid Path";
-        }
-        else{
-            LOG_INFO(MSGID_XML_PATH, 1, PMLOGKS("path",path.c_str()),"");
-            bool result = NotificationService::parseDoc(path.c_str());
-            if(result)
-            {
-                pbnjson::JValue launchParams = pbnjson::Object();
-                pbnjson::JValue parameters = pbnjson::Object();
-                Canvas *can = Canvas::instance();
-                parameters.put("Period",can->canvas);
-                parameters.put("Win_Region",can->wind_Region);
-                parameters.put("Text_Region",can->text_Region);
-                parameters.put("Content",can->content);
-                parameters.put("Line_clr",can->line_color);
-                parameters.put("text_clr",can->text_color);
-                parameters.put("font",can->font);
-                parameters.put("bold",can->bold);
-                parameters.put("Italic",can->italic);
-                parameters.put("underLine",can->underline);
-                parameters.put("Space",can->space);
-                parameters.put("Speed",can->speed);
-                parameters.put("LineView",can->line_view);
-                parameters.put("Text_size",can->text_size);
-                parameters.put("Effect",can->effect);
-                parameters.put("Message",can->message);
-                parameters.put("Thickness",can->line_thickness);
-                parameters.put("HAlign",can->hAlign);
-                parameters.put("VAlign",can->vAlign);
-                parameters.put("LineSpace",can->lineSpacing);
-                parameters.put("Repeat",can->repeat);
-                parameters.put("Window_BkColor",can->win_bckGrndclr);
-                parameters.put("Text_BkColor",can->text_bckGrndclr);
-                parameters.put("duration", Schedule::instance()->sched["Duration"]);
-
-                launchParams.put("id", ALERTAPP);//Alert Application
-                launchParams.put("noSplash", true);
-                launchParams.put("params",parameters);
-
-                if( !LSCallOneReply( NotificationService::instance()->getHandle(),"palm://com.webos.applicationManager/launch" ,
-                	JUtil::jsonToString(launchParams).c_str(), NotificationService::cb_launch, NULL, NULL, &lserror))
-                {
-                    LSErrorPrint (&lserror, stderr);
-                    errorText = "Failed LSCall to SAM";
-                }
-
-                if (!can->message.empty())
-                    can->message.clear();
-            }
-            else{
-                errorText = "Xml parsing Failed";
-            }
-        }
-    }
-
-    pbnjson::JValue json = pbnjson::Object();
-    if(errorText.empty()){
-        json.put("returnValue", true);
-    }
-    else
-    {
-        json.put("returnValue", false);
-        json.put("errorText", errorText);
-    }
-    std::string result = pbnjson::JGenerator::serialize(json, pbnjson::JSchemaFragment("{}"));
-    if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
-    {
-        return false;
-    }
-
-    return true;
-
-}
-
 bool NotificationService::cb_launch(LSHandle* lshandle, LSMessage *msg, void *user_data)
 {
     LSErrorSafe lserror;
@@ -4026,8 +3908,6 @@ void NotificationService::processAlertMsgQueue()
     {
         std::string errText;
         NotificationService::instance()->postAlertNotification(alertMsgQueue.front(), errText);
-        //NotificationService::instance()->postNotification(alertMsgQueue.front(),false,false); BreadNutMergeTODO : This line is used instead for wearable
-
         alertMsgQueue.pop();
     }
 }
