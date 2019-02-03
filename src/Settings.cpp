@@ -40,7 +40,7 @@ Settings::Settings():m_disableToastTimestamp(0),m_thresholdTimer(120),m_retentio
 
 Settings::~Settings()
 {
-
+	s_settings_instance = 0;
 }
 
 Settings* Settings::instance()
