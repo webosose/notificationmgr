@@ -35,7 +35,7 @@ AppList::AppList()
 
 AppList::~AppList()
 {
-
+	s_applist_instance = 0;
 }
 
 AppList* AppList::instance()
