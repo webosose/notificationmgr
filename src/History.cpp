@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ void History::saveMessage(pbnjson::JValue msg)
 	pbnjson::JValue payload = pbnjson::Object();
 
 	pbnjson::JValue scheduleInMsg = msg["schedule"];
-        if(scheduleInMsg.isNull()) 
+        if(scheduleInMsg.isNull())
         {
          pbnjson::JValue schedule = pbnjson::Object();
          schedule.put("expire", MAX_TIMESTAMP);
@@ -130,17 +130,17 @@ bool History::selectMessage(LSHandle* lshandle, const std::string& id, LSMessage
     }
     g_free (query);
     LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d]", __FUNCTION__, __LINE__);
-    return true;    
+    return true;
 }
 
 bool History::selectRemoteMessage(LSHandle* lshandle, const std::string& id, LSMessage *message)
-{	
+{
     LSErrorSafe lserror;
 
     LSMessageRef(message);
     replyMsg = message;
 
-    gchar* query = "";
+    gchar* query = (char *)"";
 
     if(id == "all")
     {
@@ -159,9 +159,9 @@ bool History::selectRemoteMessage(LSHandle* lshandle, const std::string& id, LSM
     }
     g_free (query);
     LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d]", __FUNCTION__, __LINE__);
-	
+
     return true;
-    
+
 }
 
 
@@ -274,7 +274,7 @@ bool History::deleteNotiMessageFromDb(LSHandle* lsHandle, pbnjson::JValue notifi
             g_free (query);
             LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d]", __FUNCTION__, __LINE__);
         }
-    } 
+    }
     else if(!removeNotiNameObj.isNull())
     {
         LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d]", __FUNCTION__, __LINE__);
@@ -307,7 +307,7 @@ bool History::deleteNotiMessageFromDb(LSHandle* lsHandle, pbnjson::JValue notifi
 
 bool History::deleteRemoteNotiMessage(LSHandle* lsHandle, pbnjson::JValue notificationPayload)
 {
-	
+
 	return deleteNotiMessageFromDb(lsHandle, notificationPayload, "removeRemoteNotiId", "remotePackageName", "remotePackageName","remoteNotiId");
 	/*
     LSErrorSafe lserror;
@@ -371,7 +371,7 @@ bool History::deleteRemoteNotiMessage(LSHandle* lsHandle, pbnjson::JValue notifi
             LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d]", __FUNCTION__, __LINE__);
         }
     }
-	
+
     return true;
     */
 }
