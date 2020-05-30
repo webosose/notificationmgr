@@ -1,0 +1,4 @@
+Open Source Software Package:
+- name: webOSOSE-notificationmgr
+  source: https://github.com/webosose/notificationmgr
+  license: Apache-2.0
