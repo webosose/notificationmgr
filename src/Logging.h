@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -113,6 +113,7 @@ PmLogContext GetNotificationPmLogContext();
 #define MSGID_NOTIFY_ENABLE "NOTIFY_ENABLE"
 #define MSGID_NOTIFY_DISABLE "NOTIFY_DISABLE"
 #define MSGID_NOTIFY_NOTPOST "NOTIFY_NOTPOST"
+#define MSGID_SVC_GET_NOTIFICATION       "SVC_GET_NOTIFICATION"
 
 #define MSGID_FAILED_TO_RESPOND "LSMESSAGE_FAILED_TO_RESPOND"
 

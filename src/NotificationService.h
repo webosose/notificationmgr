@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -30,6 +30,9 @@
 #include "AppList.h"
 #include "Settings.h"
 #include "History.h"
+#include "LSUtils.h"
+
+#define NUM_DISPLAYS 2
 
 class NotificationService
 {
@@ -47,67 +50,53 @@ public:
     static bool cb_SubscriptionCanceled(LSHandle* lshandle, LSMessage *msg, void *user_data);
 
     static bool cb_getNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
+    static bool cb_getToastCount(LSHandle* lshandle, LSMessage *msg, void *user_data);
+    static bool cb_getToastList(LSHandle *lshandle, LSMessage *msg, void *user_data);
+    static bool cb_setToastStatus(LSHandle *lshandle, LSMessage *msg, void *user_data);
     static bool cb_createToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_createAlert(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_createAlertIsAllowed(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_createInputAlert(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_enableToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_disableToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_closeToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_closeAlert(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_closeAllAlerts(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_closeInputAlert(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_enable(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_disable(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_createPincodePrompt(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_closePincodePrompt(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_getSystemSetting(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_setSystemSetting(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_getSystemSettingForCountry(LSHandle* lshandle, LSMessage *msg, void *user_data);
 
     static bool cb_createNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_createRemoteNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_removeNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_removeRemoteNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_removeAllNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_getNotificationInfo(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_getRemoteNotificationInfo(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_launch(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool parseDoc(const char *docname);
 
     bool postToastNotification(pbnjson::JValue toastNotificationPayload, bool staleMsg, bool persistentMsg, std::string &errorText);
+    bool postToastCountNotification(pbnjson::JValue toastCountPayload, bool staleMsg, bool persistentMsg, std::string &errorText);
     bool postAlertNotification(pbnjson::JValue alertNotificationPayload, std::string &errorText);
-    bool postInputAlertNotification(pbnjson::JValue alertNotificationPayload, std::string &errText);
-    void postPincodePromptNotification(pbnjson::JValue pincodePromptNotificationPayload);
     void postNotification(pbnjson::JValue alertNotificationPayload, bool remove, bool removeAll);
 
     void setUIEnabled(bool enabled);
     void processNotiMsgQueue();
     void processAlertMsgQueue();
     void processToastMsgQueue();
-    void processInputAlertMsgQueue();
-public:
-    void resetPincode_message();
-    void setPincode_message(LSMessage *msg);
-    bool getPincode_message(LSMessage **msg);
-    bool checkUnacceptablePincode(const std::string &rPincode);
 
 private:
     void onAlertStatus(bool enabled);
-    void onPincodePromptStatus(bool enabled);
 
 private:
     std::queue<pbnjson::JValue> alertMsgQueue;
-    std::queue<pbnjson::JValue> inputAlertMsgQueue;
 
     static bool alertRespondWithError(LSMessage* message, const std::string& sourceId, const std::string& alertId, const std::string& alertTitle, const std::string& alertMessage, const std::string& errorText);
     static bool alertRespond(LSMessage* msg, const std::string& sourceId, const std::string& alertId, const std::string& alertTitle, const std::string& alertMessage, const pbnjson::JValue& postCreateAlert);
+    static bool alertRespond(bool success, const std::string &errorText,
+    LSMessageWrapper msg, const std::string& sourceId,
+    const std::string& alertId, const std::string& alertTitle, const std::string& alertMessage,
+    const pbnjson::JValue& postCreateAlert = pbnjson::JValue());
 
 private:
-    LSMessage* m_pincode_message;
-    std::string m_tmp_pincode;
-    std::string m_pincode_timestamp;
-
     boost::signals2::scoped_connection m_connAlertStatus;
     bool UI_ENABLED;
     bool BLOCK_ALERT_NOTIFICATION;
@@ -130,11 +119,18 @@ private:
     std::queue<notiMsgItem*> notiMsgQueue;
     std::queue<pbnjson::JValue> toastMsgQueue;
 
-    const char* getCaller(LSMessage *msg, const char* defaultName);
+    const char* getServiceName(LSMessage *msg);
     void pushNotiMsgQueue(pbnjson::JValue payload, bool remove, bool removeAll);
     void popNotiMsgQueue();
-    const char* getServiceName(LSMessage *msg);
-    boost::signals2::scoped_connection m_connPincodePromptStatus;
+    static std::string m_user_name;
+    static int m_display_id;
+
+    typedef struct Toast_Status_Count {
+            int readCount;
+            int unreadCount;
+    } toastCount;
+
+    static toastCount toastCountVector[NUM_DISPLAYS];
 
 protected:
     //LSMethod* get_private_methods() const;

@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -49,11 +49,14 @@
 #define PRIVILEGED_SOURCE "com.lge.service.remotenotification"
 #define PRIVILEGED_APP_SOURCE "com.lge.app.remotenotification"
 #define PRIVILEGED_SYSTEM_UI_SOURCE "com.webos.surfacemanager"
+#define PRIVILEGED_SYSTEM_UI_NOTI "com.webos.app.notification"
 #define PRIVILEGED_CLOUDLINK_SOURCE "com.lge.service.cloudlink"
 #define ALERTAPP "com.webos.app.commercial.alert"
 
 static NotificationService* s_instance = 0;
-
+std::string NotificationService::m_user_name = "guest";
+int NotificationService::m_display_id = 0;
+NotificationService::toastCount NotificationService::toastCountVector[] = {};
 
 //LS2 Functions
 static LSMethod s_methods[] =
@@ -62,38 +65,32 @@ static LSMethod s_methods[] =
     { "createAlert", NotificationService::cb_createAlert},
     { "closeToast", NotificationService::cb_closeToast},
     { "closeAlert", NotificationService::cb_closeAlert},
-    { "createPincodePrompt", NotificationService::cb_createPincodePrompt},
     { "createNotification", NotificationService::cb_createNotification},
     { "removeNotification", NotificationService::cb_removeNotification},
-    { "createInputAlert", NotificationService::cb_createInputAlert},
-    { "closeInputAlert", NotificationService::cb_closeInputAlert},
     { "getToastNotification", NotificationService::cb_getNotification},
     { "getAlertNotification", NotificationService::cb_getNotification},
-    { "getInputAlertNotification", NotificationService::cb_getNotification},
-    { "getPincodePromptNotification", NotificationService::cb_getNotification},
-    { "closePincodePrompt", NotificationService::cb_closePincodePrompt},
     { "enableToast", NotificationService::cb_enableToast},
-    { "disableToast", NotificationService::cb_disableToast},  
+    { "disableToast", NotificationService::cb_disableToast},
     { "closeAllAlerts", NotificationService::cb_closeAllAlerts},
     { "enable", NotificationService::cb_enable},
     { "disable", NotificationService::cb_disable},
     { "getNotification", NotificationService::cb_getNotification},
     { "getNotificationInfo", NotificationService::cb_getNotificationInfo},
     { "removeAllNotification", NotificationService::cb_removeAllNotification},
+    { "getToastCount", NotificationService::cb_getToastCount},
+    { "getToastList", NotificationService::cb_getToastList},
+    { "setToastStatus", NotificationService::cb_setToastStatus},
     {0, 0}
 };
 
 using namespace std::placeholders;
 
 NotificationService::NotificationService()
-    : m_pincode_message(NULL),UI_ENABLED(false), BLOCK_ALERT_NOTIFICATION(false), BLOCK_TOAST_NOTIFICATION(false)
+    : UI_ENABLED(false), BLOCK_ALERT_NOTIFICATION(false), BLOCK_TOAST_NOTIFICATION(false)
 {
 	m_service = 0;
     m_connAlertStatus = UiStatus::instance().alert().sigStatus.connect(
         std::bind(&NotificationService::onAlertStatus, this, _1)
-    );
-    m_connPincodePromptStatus = UiStatus::instance().prompt().sigStatus.connect(
-        std::bind(&NotificationService::onPincodePromptStatus, this, _1)
     );
 }
 
@@ -162,23 +159,6 @@ void NotificationService::detach()
 	m_service = 0;
 }
 
-const char* NotificationService::getCaller(LSMessage *msg, const char* defaultName)
-{
-    const char* caller = LSMessageGetApplicationID(msg);
-
-    if(!caller)
-    {
-        caller = LSMessageGetSenderServiceName(msg);
-        if(!caller)
-        {
-            LOG_WARNING(MSGID_CA_CALLERID_MISSING, 0, "Caller ID is missing in %s", __PRETTY_FUNCTION__);
-            caller = defaultName;
-        }
-    }
-
-    return caller;
-}
-
 const char* NotificationService::getServiceName(LSMessage *msg)
 {
 	const char* caller = LSMessageGetSenderServiceName(msg);
@@ -239,10 +219,9 @@ bool NotificationService::cb_getNotification(LSHandle* lshandle, LSMessage *msg,
 	bool success = false;
 	bool subscribeUI = false;
     std::string checkCaller = "";
-
-	const char* caller = NULL;
-    caller = NotificationService::instance()->getCaller(msg, "Anonymous");
-
+    std::string caller = LSUtils::getCallerId(msg);
+    if (caller.empty())
+        caller = "Anonymous";
     // Check for Caller Id
     checkCaller = Utils::extractSourceIdFromCaller(caller);
     LOG_DEBUG("cb_getNotification Caller = %s", checkCaller.c_str());
@@ -283,6 +262,62 @@ bool NotificationService::cb_getNotification(LSHandle* lshandle, LSMessage *msg,
 	return true;
 }
 
+bool NotificationService::cb_getToastCount(LSHandle* lshandle, LSMessage *msg, void *user_data)
+{
+    LSErrorSafe lserror;
+
+    bool subscribed = false;
+    bool subscribeUI = false;
+    std::string checkCaller="";
+    std::string caller = LSUtils::getCallerId(msg);
+    if (caller.empty())
+        caller = "Anonymous";
+    // Check for Caller Id of notification app
+    checkCaller = Utils::extractSourceIdFromCaller(caller);
+    std::string method = LSUtils::getMethod(msg);
+    LOG_DEBUG("cb_getToastCount Caller = %s", checkCaller.c_str());
+
+    if ((std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_SOURCE) != std::string::npos )
+       ||(std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_NOTI) != std::string::npos))
+    {
+        subscribeUI = true;
+
+        if (LSMessageIsSubscription(msg))
+            subscribed = LSSubscriptionProcess(lshandle, msg, &subscribed, &lserror);
+    }
+
+    LOG_INFO(MSGID_SVC_GET_NOTIFICATION, 4,
+        PMLOGKS("caller", checkCaller.c_str()),
+        PMLOGKS("method", method.c_str()),
+        PMLOGKS("subscribe", LSMessageIsSubscription(msg) ? "true" : "false"),
+        PMLOGKS("subscribed", subscribed ? "true" : "false"), " ");
+
+    pbnjson::JValue json = pbnjson::Object();
+    json.put("returnValue", true);
+    json.put("subscribed", subscribed);
+
+    if (subscribeUI && subscribed)
+    {
+        Utils::async([=] {
+            if (method == "getToastCount")
+                UiStatus::instance().toast().enable(UiStatus::ENABLE_UI);
+        });
+
+        //BreadnutMergeTODO: Below 2 lines are not working properly
+        NotificationService::instance()->setUIEnabled(true);
+        NotificationService::instance()->processNotiMsgQueue();
+    }
+
+    std::string result = pbnjson::JGenerator::serialize(json, pbnjson::JSchemaFragment("{}"));
+
+    if(!LSMessageReply(lshandle, msg, result.c_str(), &lserror))
+    {
+        return false;
+    }
+
+    return true;
+}
+
 bool NotificationService::cb_SubscriptionCanceled(LSHandle *lshandle, LSMessage *msg, void *user_data)
 {
 	const char *val = LSMessageGetMethod(msg);
@@ -292,12 +327,10 @@ bool NotificationService::cb_SubscriptionCanceled(LSHandle *lshandle, LSMessage 
 	std::string kind = val ? val : std::string("");
 	unsigned int subscribers = LSSubscriptionGetHandleSubscribersCount(lshandle, kind.c_str());
 
-	LOG_DEBUG("cb_SubscriptionCanceled: %s, subscribers:%u", method.c_str(), subscribers);
+    LOG_DEBUG("cb_SubscriptionCanceled: %s, subscribers:%u", method.c_str(), subscribers);
 
 	if (method == "getToastNotification" ||
-		method == "getAlertNotification" ||
-		method == "getInputAlertNotification" ||
-		method == "getPincodePromptNotification")
+		method == "getAlertNotification")
         {
 		if (subscribers > 1)
 			return true;
@@ -346,6 +379,7 @@ None
 
 bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, void *user_data)
 {
+	int displayId = 0;
 	LSErrorSafe lserror;
 
 	bool success = false;
@@ -381,16 +415,20 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
 
 	JUtil::Error error;
 
-	const char* caller = NULL;
-    caller = NotificationService::instance()->getCaller(msg, NULL);
+    std::string errorText;
+    pbnjson::JValue getActiveUserParams;
+    pbnjson::JValue postToastCount = pbnjson::Object();
+    bool toastCountStatus = false;
+    int readCount, unreadCount = 0;
 
-    if(!caller)
+    std::string caller = LSUtils::getCallerId(msg);
+    if(caller.empty())
     {
         LOG_WARNING(MSGID_CT_CALLERID_MISSING, 0, "Caller ID is missing in %s", __PRETTY_FUNCTION__);
         errText = "Unknown Source";
         goto Done;
     }
-    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller);
+    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller.c_str());
 
 
 
@@ -408,7 +446,17 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
 		privilegedSource = true;
 	}
 
+    m_display_id = request["displayId"].asNumber<int>();
 	sourceId = request["sourceId"].asString();
+	if (request.hasKey("displayId"))
+	{
+	    displayId = request["displayId"].asNumber<int>();
+	    LOG_DEBUG("Key Display ID: %d", displayId);
+//	    LOG_INFO("port Key Display ID: %d", displayId);
+	    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "port [%s:%d] displayId: %d", __FUNCTION__, __LINE__, displayId);
+	}
+
+    toastCountVector[displayId].unreadCount++;
 
     if(sourceId.length() == 0)
     {
@@ -446,6 +494,7 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
 
 	postCreateToast = pbnjson::Object();
 	postCreateToast.put("sourceId", sourceId);
+	postCreateToast.put("displayId", displayId);
 	action = pbnjson::Object();
 
 	if(Settings::instance()->isPrivilegedSource(caller))
@@ -598,11 +647,20 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
 		goto Done;
 	}
 
+        postCreateToast.put("readStatus", false);
+        postCreateToast.put("user", m_user_name);
+        LOG_DEBUG("Toast Payload: %s", JUtil::jsonToString(postCreateToast).c_str());
+
 	appMgrParams = pbnjson::Object();
 	onclick = request["onclick"];
 
 	if(onclick.isNull()) //launch the app that creates the toast.
 	{
+            postToastCount.put("displayId", displayId);
+            postToastCount.put("readCount", toastCountVector[displayId].readCount);
+            postToastCount.put("unreadCount", toastCountVector[displayId].unreadCount);
+            postToastCount.put("totalCount", toastCountVector[displayId].readCount + toastCountVector[displayId].unreadCount);
+            toastCountStatus = NotificationService::instance()->postToastCountNotification(postToastCount, staleMsg, persistentMsg, errText);
 		//Check the SourceId exist in the App list.
 		if(AppList::instance()->isAppExist(sourceId))
 		{
@@ -748,66 +806,60 @@ struct AlertData
 	pbnjson::JValue postCreateAlert;
 	std::vector<std::string> uriList;
 	std::string uriVerified;
-	std::string serviceNameCreateAlert; 	
+	std::string serviceNameCreateAlert;
 };
 
-bool NotificationService::cb_createAlertIsAllowed(LSHandle* lshandle, LSMessage *msg, void *user_data)
+bool NotificationService::alertRespond(bool success, const std::string &errorText,
+        LSMessageWrapper msg, const std::string& sourceId,
+        const std::string& alertId, const std::string& alertTitle, const std::string& alertMessage,
+        const pbnjson::JValue& postCreateAlert)
 {
-	AlertData *data = static_cast<AlertData*>(user_data);
-	LSErrorSafe lserror;
-	JUtil::Error error;
-	pbnjson::JValue request = JUtil::parse(LSMessageGetPayload(msg), "", &error);
+    std::string errText = errorText;
 
-	LSMessage* message = data->message;
-	std::string sourceId = data->sourceId;
-	std::string alertId = data->alertId;
-	std::string alertTitle = data->alertTitle;
-	std::string alertMessage = data->alertMessage;
-	pbnjson::JValue postCreateAlert = data->postCreateAlert;
-	std::string uriVerified = data->uriVerified;
+    if (success)
+    {
+        if (!UiStatus::instance().alert().isEnabled(UiStatus::ENABLE_UI))
+        {
+            //save the message in the queue.
+            LOG_DEBUG("createAlert: UI is not yet ready. push into msg queue.");
+            NotificationService::instance()->alertMsgQueue.push(postCreateAlert);
+        }
+        else
+        {
+            //Post the message
+            success = NotificationService::instance()->postAlertNotification(postCreateAlert, errText);
+        }
+    }
 
-	if(request.isNull())
-	{
-		LOG_WARNING(MSGID_CA_PARSE_FAIL, 0, "Message parsing error in %s", __PRETTY_FUNCTION__ );
-		delete data;
-		return alertRespondWithError(message, sourceId, alertId, alertTitle, alertMessage, "Message is not parsed");
-	}
+    pbnjson::JValue json = pbnjson::Object();
+    if (!success)
+    {
+        json.put("returnValue", false);
+        json.put("errorText", errText);
 
-	if(!request["returnValue"].asBool())
-	{
+        LOG_WARNING(MSGID_NOTIFY_INVOKE_FAILED, 5,
+                PMLOGKS("SOURCE_ID", sourceId.c_str()),
+                PMLOGKS("TYPE", "ALERT"),
+                PMLOGKS("ERROR", errText.c_str()),
+                PMLOGKS("TITLE", alertTitle.c_str()),
+                PMLOGKS("MESSAGE", alertMessage.c_str()),
+                " ");
+    }
+    else
+    {
+        json.put("returnValue", true);
+        json.put("alertId", alertId);
 
-	    LOG_WARNING(MSGID_CA_MSG_EMPTY, 0, "Call failed in %s", __PRETTY_FUNCTION__ );
-	    delete data;
-		return alertRespondWithError(message, sourceId, alertId, alertTitle, alertMessage, "Call failed");
-	}
+        LOG_INFO(MSGID_NOTIFY_INVOKE, 4,
+                PMLOGKS("SOURCE_ID", sourceId.c_str()),
+                PMLOGKS("TYPE", "ALERT"),
+                PMLOGKS("TITLE", alertTitle.c_str()),
+                PMLOGKS("MESSAGE", alertMessage.c_str()),
+                " ");
+    }
 
-	if(!request["allowed"].asBool())
-	{
-		delete data;
-		return alertRespondWithError(message, sourceId, alertId, alertTitle, alertMessage, "Not allowed to call method specified in the uri: " + uriVerified);
-	}
-
-	if(data->uriList.empty())
-	{
-		delete data;
-		return alertRespond(message, sourceId, alertId, alertTitle, alertMessage, postCreateAlert);
-	}
-
-	std::string uri = data->uriList.back();
-	data->uriList.pop_back();
-
-	data->uriVerified = uri;
-
-	std::string params = "{\"uri\": \"" + uri + "\", \"requester\": \"" + data->serviceNameCreateAlert + "\"}";
-	if(!LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/isCallAllowed", params.c_str(), cb_createAlertIsAllowed, data, NULL, &lserror))
-	{
-		delete data;
-		return alertRespondWithError(message, sourceId, alertId, alertTitle, alertMessage, std::string("Call failed - ") + lserror.message);
-	}
-
-	return true;
+    return LSMessageRespond(msg, json.stringify().c_str(), NULL);
 }
-
 //->Start of API documentation comment block
 /**
 @page com_webos_notification com.webos.notification
@@ -869,24 +921,18 @@ bool NotificationService::cb_createAlert(LSHandle* lshandle, LSMessage *msg, voi
     int checkOkType;
     int checkCancelType;
     bool ignoreDisable = false;
+    int displayId = 0;
 
 	unsigned found = 0;
 	JUtil::Error error;
 
 	std::vector<std::string> uriList;
 
-	const char* caller = NULL;
-    caller = NotificationService::instance()->getCaller(msg, NULL);
-
-	if(!caller)
+    std::string caller = LSUtils::getCallerId(msg);
+	if(caller.empty())
 	{
-		caller = LSMessageGetSenderServiceName(msg);
-		if(!caller)
-		{
-		        LOG_WARNING(MSGID_CALLERID_MISSING, 1,
-				PMLOGKS("API", "createAlert"), " ");
-			return alertRespondWithError(msg, sourceId, alertId, "", "", "Unknown Source");
-		}
+	    LOG_WARNING(MSGID_CALLERID_MISSING, 1, PMLOGKS("API", "createAlert"), " ");
+	    return alertRespond(false, "Unknown Source", msg, sourceId, alertId, "", "");
 	}
 
 	sourceId = std::string(caller);
@@ -911,6 +957,13 @@ bool NotificationService::cb_createAlert(LSHandle* lshandle, LSMessage *msg, voi
 	postCreateAlert = pbnjson::Object();
 
 	alertInfo.put("sourceId",sourceId);
+
+	if (request.hasKey("displayId")) {
+	    displayId = request["displayId"].asNumber<int>();
+//	    LOG_INFO("port displayId: %d", displayId);
+	    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "port [%s:%d] displayId: %d", __FUNCTION__, __LINE__, displayId);
+	}
+	alertInfo.put("displayId", displayId);
 
 	if(!request["title"].isNull())
 	{
@@ -1099,7 +1152,7 @@ bool NotificationService::cb_createAlert(LSHandle* lshandle, LSMessage *msg, voi
 					if(!onclickString.empty())
 					{
 						uriList.push_back(onclickString);
-					}					
+					}
 				}
 
 				// Copy focus
@@ -1141,638 +1194,7 @@ bool NotificationService::cb_createAlert(LSHandle* lshandle, LSMessage *msg, voi
 	data->serviceNameCreateAlert = NotificationService::instance()->getServiceName(msg);
 	data->postCreateAlert = postCreateAlert;
 
-	std::string params = "{\"uri\": \"" + uri + "\", \"requester\": \"" + data->serviceNameCreateAlert + "\"}";
-	if(!LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/isCallAllowed", params.c_str(), cb_createAlertIsAllowed, data, NULL, &lserror))
-	{
-		delete data;
-		return alertRespondWithError(msg, sourceId, alertId, title, message, std::string("Call failed - ") + lserror.message);
-	}
-
-
 	return true;
-}
-
-//->Start of API documentation comment block
-/**
-@page com_webos_notification com.webos.notification
-@{
-@section com_webos_notification_createInputAlert createInputAlert
-
-Creates system alert notification
-
-@par Parameters
-Name       | Required |  Type   | Description
------------|----------|---------|------------
-appId      | yes      | String  | Input Application ID
-portType   | yes      | String  | Input port type
-portName   | yes      | String  | Input port name
-portIcon   | yes      | String  | Input port icon file name
-deviceName | no       | String  | Connected device name
-deviceIcon | no       | String  | Connected device icon file name
-timeout    | no       | number  | Time (in sec) when alert will close automatically
-params     | no       | object  | Parameters to be passed to the application
-inputs     | no       | array   | Input object array
-
-@par Returns(Call)
-Name         | Required | Type    | Description
--------------|----------|---------|------------
-returnValue  | yes      | Boolean | True
-inputAlertId | yes      | String  | This would be appId + "-" + Timestamp.
-
-@par Returns(Subscription)
-None
-
-@}
-*/
-//->End of API documentation comment block
-
-bool NotificationService::cb_createInputAlert(LSHandle* lshandle, LSMessage *msg, void *user_data)
-{
-    LSErrorSafe lserror;
-    std::string errText;
-    pbnjson::JValue request;
-    bool success = false;
-    pbnjson::JValue postCreateAlert;
-    pbnjson::JValue alertInfo;
-
-    std::string sourceId;
-    std::string portName; // for log
-    std::string timestamp;
-    JUtil::Error error;
-
-    const char* caller = LSMessageGetApplicationID(msg);
-    if(!caller) {
-        caller = LSMessageGetSenderServiceName(msg);
-        if(!caller) {
-            LOG_WARNING(MSGID_CALLERID_MISSING, 1,
-                PMLOGKS("API", "createInputAlert"), " ");
-            errText = "Unknown Source";
-            goto Done;
-        }
-    }
-    sourceId = std::string(caller);
-
-    //Check for Caller Id
-    if(!Settings::instance()->isPrivilegedSource(caller) && !Settings::instance()->isPartOfAggregators(std::string(caller))) {
-        LOG_WARNING(MSGID_PERMISSION_DENY, 1,
-            PMLOGKS("API", "createInputAlert"), " ");
-        success = false;
-        errText = "Permission Denied";
-        goto Done;
-    }
-
-    request = JUtil::parse(LSMessageGetPayload(msg), "createInputAlert", &error);
-
-    if(request.isNull()) {
-        LOG_WARNING(MSGID_CIA_PARSE_FAIL, 0, "Message parsing error in %s", __PRETTY_FUNCTION__ );
-        errText = "Message is not parsed";
-        goto Done;
-    }
-
-    if (!UiStatus::instance().input().isEnabled())
-    {
-        errText = "Input alert is blocked by " + UiStatus::instance().input().reason();
-        goto Done;
-    }
-
-    alertInfo = pbnjson::Object();
-    postCreateAlert = pbnjson::Object();
-
-    if (request.hasKey("inputs"))
-    {
-        pbnjson::JValue reqInputs = request["inputs"];
-        pbnjson::JValue inputs = pbnjson::Array();
-
-        size_t arraySize = reqInputs.arraySize();
-        if (arraySize == 0) {
-            LOG_WARNING(MSGID_CIA_INPUTS_EMPTY, 0, " ");
-            errText = "inputs can't be empty";
-            goto Done;
-        }
-
-        for(size_t i = 0;i < arraySize;++i)
-        {
-            pbnjson::JValue input = reqInputs[i];
-            pbnjson::JValue info = JsonParser::createInputAlertInfo(input, errText);
-            if (info.isNull())
-                goto Done;
-            inputs.append(info);
-
-            if (portName.empty())
-                portName = info["portName"].asString();
-            else
-                portName += std::string(",") + info["portName"].asString();
-        }
-
-        alertInfo.put("inputs", inputs);
-    }
-    else
-    {
-        alertInfo = JsonParser::createInputAlertInfo(request, errText);
-        if (alertInfo.isNull())
-            goto Done;
-
-        portName = alertInfo["portName"].asString();
-    }
-
-    //Check for timeout property
-    int timeout;
-    timeout = 10;
-    if(!request["timeout"].isNull()) {
-        timeout = request["timeout"].asNumber<int>();
-        timeout = (request["timeout"].asNumber<int>() < timeout) ? timeout : request["timeout"].asNumber<int>();
-    }
-    alertInfo.put("timeout", timeout);
-
-    postCreateAlert.put("alertAction", "open");
-    postCreateAlert.put("alertInfo", alertInfo);
-
-    Utils::createTimestamp(timestamp);
-    postCreateAlert.put("timestamp", timestamp);
-
-    //Post the message
-    success = NotificationService::instance()->postInputAlertNotification(postCreateAlert, errText);
-
-Done:
-    pbnjson::JValue json = pbnjson::Object();
-    json.put("returnValue", success);
-
-    if(!success)
-    {
-        json.put("errorText", errText);
-
-        LOG_WARNING(MSGID_NOTIFY_INVOKE_FAILED, 4,
-            PMLOGKS("SOURCE_ID", sourceId.c_str()),
-            PMLOGKS("TYPE", "INPUTALERT"),
-            PMLOGKS("ERROR", errText.c_str()),
-            PMLOGKS("CONTENT", portName.c_str()),
-            " ");
-    }
-    else
-    {
-        json.put("alertId", (sourceId + "-" + timestamp));
-
-        LOG_INFO(MSGID_NOTIFY_INVOKE, 3,
-            PMLOGKS("SOURCE_ID", sourceId.c_str()),
-            PMLOGKS("TYPE", "INPUTALERT"),
-            PMLOGKS("CONTENT", portName.c_str()),
-            " ");
-    }
-
-    std::string result = pbnjson::JGenerator::serialize(json, pbnjson::JSchemaFragment("{}"));
-    if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
-    {
-        return false;
-    }
-
-    return true;
-}
-
-//->Start of API documentation comment block
-/**
-@page com_webos_notification com.webos.notification
-@{
-@section com_webos_notification_closePincodePrompt
-
-closePincodePrompt notification
-
-@par Parameters
-Name        | Required | Type   | Description
--------------|----------|----------|------------
-pincode     | no     |  string |
-closeType   | yes      | string |
-
-
-@par Returns(Call)
-Name                 | Required  | Type     | Description
-----------------------|-------------|-----------|------------
-returnValue 	        | yes        | Boolean | True
-
-
-@par Returns(Subscription)
-None
-
-@}
-*/
-//->End of API documentation comment block
-
-bool NotificationService::cb_closePincodePrompt(LSHandle* lshandle, LSMessage *msg, void *user_data)
-{
-	std::string pincode = "";
-	std::string sourceId = "";
-	std::string closeType = "";
-	std::string mode = "";
-	std::string errText = "";
-	bool success = false;
-	bool needPost = false;
-	LSErrorSafe lserror;
-	JUtil::Error error;
-	pbnjson::JValue reply;
-	LSMessage *promptMsg = NULL;
-	const char* caller = LSMessageGetApplicationID(msg);
-
-	if(!caller)
-	{
-		caller = LSMessageGetSenderServiceName(msg);
-		if(!caller)
-		{
-			LOG_WARNING(MSGID_CALLERID_MISSING, 1,
-				PMLOGKS("API", "closePincodePrompt"), " ");
-			errText = "Unknown Source";
-			goto Done;
-		}
-	}
-
-	//check for Caller Prompt
-	if (NotificationService::instance()->getPincode_message(&promptMsg) == false)
-	{
-		LOG_WARNING(MSGID_PERMISSION_DENY, 1,
-			PMLOGKS("API", "closePincodePrompt"), " ");
-		errText = "Permission Denied (Pincode prompt is not active)";
-		goto Done;
-	}
-
-	reply = JUtil::parse(LSMessageGetPayload(msg), "closePincodePrompt", &error);
-	LOG_DEBUG("cb_closePincodePrompt reply = %s", JUtil::jsonToString(reply).c_str());
-
-	if (reply.isNull())
-	{
-		LOG_WARNING(MSGID_RP_PARSE_FAIL, 0, "Message parsing error in %s", __PRETTY_FUNCTION__ );
-		errText = "Message is not parsed";
-		goto Done;
-	}
-
-	sourceId = std::string(caller);
-	pincode = reply["pincode"].asString();
-	closeType = reply["closeType"].asString();
-
-	if(!reply["mode"].isNull())
-	{
-		mode = reply["mode"].asString();
-		LOG_DEBUG("pincodePrompt sourceId: %s, close mode: %s, pincode = %s",
-                   sourceId.c_str(), mode.c_str(), pincode.c_str());
-	}
-	success = true;
-
-Done:
-    pbnjson::JValue jsonNumber = pbnjson::Object();
-    pbnjson::JValue postCreatePincodePrompt = pbnjson::Object();
-    pbnjson::JValue pincodePromptInfo = pbnjson::Object();
-    pbnjson::JValue jsonPrompt = pbnjson::Object();
-    jsonNumber.put("returnValue", success);
-    if(!success)
-        jsonNumber.put("errorText", errText);
-
-    std::string resultNumber = pbnjson::JGenerator::serialize(jsonNumber, pbnjson::JSchemaFragment("{}"));
-    if(!LSMessageReply( lshandle, msg, resultNumber.c_str(), &lserror))
-    {
-        return false;
-    }
-
-    if (!success)
-    {
-        LOG_WARNING(MSGID_NOTIFY_CLOSE_FAILED, 4,
-            PMLOGKS("SOURCE_ID", sourceId.c_str()),
-            PMLOGKS("TYPE", "PINCODE"),
-            PMLOGKS("ERROR", errText.c_str()),
-            PMLOGKS("CONTENT", closeType.c_str()),
-            " ");
-        return true;
-    }
-    else
-    {
-        LOG_WARNING(MSGID_NOTIFY_CLOSE, 3,
-            PMLOGKS("SOURCE_ID", sourceId.c_str()),
-            PMLOGKS("TYPE", "PINCODE"),
-            PMLOGKS("CONTENT", closeType.c_str()),
-            " ");
-    }
-
-	postCreatePincodePrompt.put("pincodePromptAction", "close");
-	pincodePromptInfo.put("timestamp", NotificationService::instance()->m_pincode_timestamp);
-	postCreatePincodePrompt.put("pincodePromptInfo", pincodePromptInfo);
-	LOG_DEBUG("cb_createPincodePrompt postCreatePincodePrompt = %s", JUtil::jsonToString(postCreatePincodePrompt).c_str());
-	NotificationService::instance()->postPincodePromptNotification(postCreatePincodePrompt);
-	LOG_DEBUG("pincodePrompt close Type: %s", closeType.c_str());
-
-	if (closeType != "relay")
-	{
-		jsonPrompt.put("matched", false);
-	}
-	else if (closeType == "relay")
-	{
-		if (mode == "")
-		{
-			PincodeValidator pincodeValidator(Settings::instance()->m_system_pincode);
-			if (pincodeValidator.check(pincode))
-			{
-				jsonPrompt.put("matched", true);
-			}
-			else
-			{
-				LOG_WARNING(MSGID_RP_PINCODE_INVALID, 0, "Invalid pincode in %s", __PRETTY_FUNCTION__);
-				jsonPrompt.put("matched", false);
-				pincodePromptInfo.put("retry", true);
-				pincodePromptInfo.put("promptType", "parental");
-				needPost = true;
-			}
-		}
-		else if (mode == "set_match")
-		{
-			PincodeValidator pincodeValidator(Settings::instance()->m_system_pincode);
-			if (pincodeValidator.check(pincode))
-			{
-				pincodePromptInfo.put("promptType", "set_newpin");
-			}
-			else
-			{
-				LOG_WARNING(MSGID_RP_PINCODE_INVALID, 0, "Invalid pincode in %s", __PRETTY_FUNCTION__);
-				pincodePromptInfo.put("retry", true);
-				pincodePromptInfo.put("promptType", "set_match");
-			}
-			needPost = true;
-		}
-		else if (mode == "set_newpin")
-		{
-			if (pincode.length() == 0 || NotificationService::instance()->checkUnacceptablePincode(pincode))
-			{
-				LOG_WARNING(MSGID_RP_PINCODE_INVALID, 0, "Invalid pincode in %s", __PRETTY_FUNCTION__);
-				pincodePromptInfo.put("retry", true);
-				pincodePromptInfo.put("promptType", "set_newpin");
-			}
-			else
-			{
-				//set tmp password
-				NotificationService::instance()->m_tmp_pincode = pincode;
-				pincodePromptInfo.put("promptType", "set_verify");
-			}
-			needPost = true;
-		}
-		else if (mode == "set_verify")
-		{
-			if (pincode.length() != 0 && pincode == NotificationService::instance()->m_tmp_pincode)
-			{
-				bool result = false;
-				LSErrorSafe lserrorSetting;
-				std::string setSystemPinRequest;
-				//set pincode
-				setSystemPinRequest  = "{";
-				setSystemPinRequest += "\"settings\":{\"systemPin\":\"";
-				setSystemPinRequest += NotificationService::instance()->m_tmp_pincode;
-				setSystemPinRequest += "\"}}";
-				result = SETTING_API_CALL(NotificationService::instance()->getHandle(),
-										"luna://com.webos.settingsservice/setSystemSettings",
-										setSystemPinRequest.c_str(),
-										NotificationService::cb_setSystemSetting, msg, NULL, &lserrorSetting);
-				if (!result)
-				{
-					LOG_WARNING(MSGID_RP_PINCODE_SETFAIL, 1, PMLOGKS("REASON", lserrorSetting.message), " ");
-				}
-
-				//initalPincode
-				setSystemPinRequest  = "{";
-				setSystemPinRequest += "\"category\":\"lock\", \"settings\":{\"initialPinCode\":true}";
-				setSystemPinRequest += "}";
-				result = SETTING_API_CALL(NotificationService::instance()->getHandle(),
-										"luna://com.webos.settingsservice/setSystemSettings",
-										setSystemPinRequest.c_str(),
-										NotificationService::cb_setSystemSetting, msg, NULL, &lserrorSetting);
-				if (!result)
-				{
-					LOG_WARNING(MSGID_RP_PINCODE_SETFAIL, 1, PMLOGKS("REASON", lserrorSetting.message), " ");
-				}
-
-				NotificationService::instance()->m_tmp_pincode = "";
-			}
-			else
-			{
-				pincodePromptInfo.put("retry", true);
-				pincodePromptInfo.put("promptType", "set_verify");
-				needPost = true;
-			}
-		}
-	}
-
-	if (needPost)
-	{
-		postCreatePincodePrompt.put("pincodePromptAction", "open");
-		Utils::createTimestamp(NotificationService::instance()->m_pincode_timestamp);
-		postCreatePincodePrompt.put("timestamp", NotificationService::instance()->m_pincode_timestamp);
-		postCreatePincodePrompt.put("pincodePromptInfo", pincodePromptInfo);
-		NotificationService::instance()->postPincodePromptNotification(postCreatePincodePrompt);
-
-		return true;
-	}
-
-	if (promptMsg)
-	{
-		jsonPrompt.put("returnValue", success);
-		std::string resultPrompt = pbnjson::JGenerator::serialize(jsonPrompt, pbnjson::JSchemaFragment("{}"));
-
-		LOG_DEBUG("cb_closePincodePrompt resultPrompt = %s", resultPrompt.c_str());
-
-		if(!LSMessageReply( lshandle, promptMsg, resultPrompt.c_str(), &lserror))
-		{
-			LOG_WARNING(MSGID_RP_REPLY_FAIL, 0, "Reply for createPincodePrompt failed in %s", __PRETTY_FUNCTION__);
-		}
-
-		LSMessageUnref(promptMsg);
-		NotificationService::instance()->resetPincode_message();
-	}
-	else
-	{
-		LOG_WARNING(MSGID_RP_PINCODE_INVALID, 0, "Invalid promptMsg!!! in %s", __PRETTY_FUNCTION__);
-	}
-
-	return true;
-}
-
-//->Start of API documentation comment block
-/**
-@page com_webos_notification com.webos.notification
-@{
-@section com_webos_notification_createPincodePrompt
-
-Creates PincodePrompt  notification
-
-@par Parameters
-Name        | Required | Type   | Description
-------------|----------|--------|------------
-type        | yes	   | String | type of the dialog
-appId       | no       | String | app Id
-title       | no 	   | String | show title of the dialog
-messsage    | no 	   | String | show message of the dialog
-
-@par Returns(Call)
-Name                 | Required  | Type     | Description
----------------------|-----------|----------|------------
-returnValue   	     | yes 		 | Boolean  | True
-matched 	 	 	 | yes   	 | String   | result of the match
-
-@par Returns(Subscription)
-None
-
-@}
-*/
-//->End of API documentation comment block
-
-bool NotificationService::cb_createPincodePrompt(LSHandle* lshandle, LSMessage *msg, void *user_data)
-{
-	std::string errText;
-	std::string type;
-	std::string message;
-	std::string title;
-	std::string appId;
-	std::string sourceId;
-	bool success = false;
-	LSErrorSafe lserror;
-	JUtil::Error error;
-	pbnjson::JValue request;
-	pbnjson::JValue postCreatePincodePrompt;
-	pbnjson::JValue pincodePromptInfo;
-	LSMessage *prev_msg = NULL;
-        bool ignoreDisable = false;
-
-	const char* caller = LSMessageGetApplicationID(msg);
-
-	if(!caller)
-	{
-		caller = LSMessageGetSenderServiceName(msg);
-		if(!caller)
-		{
-			LOG_WARNING(MSGID_CALLERID_MISSING, 1,
-				PMLOGKS("API", "createPincodePrompt"), " ");
-			errText = "Unknown Source";
-			goto Done;
-		}
-	}
-
-	//Check for Caller Id
-	if(!Settings::instance()->isPrivilegedSource(caller) && !Settings::instance()->isPartOfAggregators(std::string(caller)))
-	{
-		LOG_WARNING(MSGID_PERMISSION_DENY, 1,
-			PMLOGKS("API", "createPincodePrompt"), " ");
-		success = false;
-		errText = "Permission Denied";
-		goto Done;
-	}
-
-	request = JUtil::parse(LSMessageGetPayload(msg), "createPincodePrompt", &error);
-
-	if(request.isNull())
-	{
-		LOG_WARNING(MSGID_CP_PARSE_FAIL, 0, "Message parsing error in %s", __PRETTY_FUNCTION__ );
-		errText = "Message is not parsed";
-		goto Done;
-	}
-
-	sourceId = std::string(caller);
-
-	type = request["promptType"].asString();
-	if(type.length() == 0)
-	{
-		LOG_WARNING(MSGID_CP_PROMPT_TYPE_INVALID, 0, "promptType is empty in %s", __PRETTY_FUNCTION__);
-		errText = "promptType is empty";
-		goto Done;
-	}
-	else if((type != "parental" && type != "set_match" ))
-	{
-		LOG_WARNING(MSGID_CP_PROMPT_TYPE_INVALID, 0, "Invalid promptType %s", __PRETTY_FUNCTION__);
-		errText = "Invalid promptType";
-		goto Done;
-	}
-	else if((type == "parental" || type == "set_match" ) && NotificationService::instance()->getPincode_message(&prev_msg))
-	{
-		//Check for active pincode prompt
-		LOG_WARNING(MSGID_CP_PROMPT_ACTIVE, 0, "Pincode prompt is active in %s", __PRETTY_FUNCTION__);
-		errText = "Pincode prompt is active";
-		goto Done;
-	}
-
-        ignoreDisable = request["ignoreDisable"].asBool();
-
-	if (!ignoreDisable && !UiStatus::instance().prompt().isEnabled())
-	{
-		errText = "Pincode prompt is blocked by " + UiStatus::instance().prompt().reason();
-		goto Done;
-	}
-
-	pincodePromptInfo = pbnjson::Object();
-	postCreatePincodePrompt = pbnjson::Object();
-
-	if(!request["title"].isNull())
-	{
-		title = request["title"].asString();
-		std::replace_if(title.begin(), title.end(), Utils::isEscapeChar, ' ');
-		pincodePromptInfo.put("title", title);
-	}
-
-	if(!request["message"].isNull())
-	{
-		message = request["message"].asString();
-		std::replace_if(message.begin(), message.end(), Utils::isEscapeChar, ' ');
-		pincodePromptInfo.put("message", message);
-	}
-
-	if(!request["appId"].isNull())
-	{
-		appId = request["appId"].asString();
-		//Remove if there is any space character except ' '
-		std::replace_if(appId.begin(), appId.end(), Utils::isEscapeChar, ' ');
-		pincodePromptInfo.put("appId", appId);
-	}
-
-	//add sourceId
-	pincodePromptInfo.put("sourceId", sourceId);
-	LOG_DEBUG("pincode Prompt sourceId = %s", sourceId.c_str());
-
-	postCreatePincodePrompt.put("pincodePromptAction", "open");
-	Utils::createTimestamp(NotificationService::instance()->m_pincode_timestamp);
-	postCreatePincodePrompt.put("timestamp", NotificationService::instance()->m_pincode_timestamp);
-	pincodePromptInfo.put("promptType", type.c_str());
-	pincodePromptInfo.put("retry", false);
-	pincodePromptInfo.put("keys", appId);
-	postCreatePincodePrompt.put("pincodePromptInfo", pincodePromptInfo);
-
-	//Post the message
-	NotificationService::instance()->postPincodePromptNotification(postCreatePincodePrompt);//open dialog
-	success = true;
-
-
-Done:
-    pbnjson::JValue json = pbnjson::Object();
-    json.put("returnValue", success);
-
-    if(!success)
-    {
-        json.put("errorText", errText);
-
-        LOG_WARNING(MSGID_NOTIFY_INVOKE_FAILED, 4,
-            PMLOGKS("SOURCE_ID", sourceId.c_str()),
-            PMLOGKS("TYPE", "PINCODE"),
-            PMLOGKS("ERROR", errText.c_str()),
-            PMLOGKS("CONTENT", type.c_str()),
-            " ");
-
-        std::string result = pbnjson::JGenerator::serialize(json, pbnjson::JSchemaFragment("{}"));
-        if (!LSMessageReply(lshandle, msg, result.c_str(), &lserror))
-        {
-            return false;
-        }
-    }
-    else
-    {
-        LOG_WARNING(MSGID_NOTIFY_INVOKE, 3,
-            PMLOGKS("SOURCE_ID", sourceId.c_str()),
-            PMLOGKS("TYPE", "PINCODE"),
-            PMLOGKS("CONTENT", type.c_str()),
-            " ");
-
-        NotificationService::instance()->setPincode_message(msg);//store
-        LSMessageRef(msg);
-    }
-
-    return true;
 }
 
 bool NotificationService::cb_setSystemSetting(LSHandle* lshandle, LSMessage *msg, void *user_data)
@@ -1815,15 +1237,13 @@ bool NotificationService::cb_createNotification(LSHandle* lshandle, LSMessage *m
 
     JUtil::Error error;
 
-    const char* caller = NULL;
-    caller = NotificationService::instance()->getCaller(msg, NULL);
-
-    if(!caller)
+    std::string caller = LSUtils::getCallerId(msg);
+    if(caller.empty())
     {
         errText = "Unknown Source";
         goto Done;
     }
-    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller);
+    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller.c_str());
 
     request = JUtil::parse(LSMessageGetPayload(msg), "createNotification", &error);
 
@@ -2053,352 +1473,6 @@ Done:
     return true;
 }
 
-bool NotificationService::cb_createRemoteNotification(LSHandle* lshandle, LSMessage *msg, void *user_data)
-{
-    LSErrorSafe lserror;
-    std::string errText;
-
-    bool success = false;
-
-    pbnjson::JValue request;
-    pbnjson::JValue postCreateRemoteNoti = pbnjson::Object();
-  //  pbnjson::JValue createRemoteNotiInfo = pbnjson::Object();
-    pbnjson::JValue remoteActionParam;
-    pbnjson::JValue removeActionArray = pbnjson::Array();
-
-    std::string remoteSourceId;
-    std::string remotePackageName;
-    std::string remoteMessage;
-    std::string remoteTitle;
-    std::string remoteTickerText;
-    std::string timestamp;
-    std::string remoteIconPath;
-    std::string remoteAppName;
-    std::string remoteBgImage;
-    std::string checkCaller;
-    std::string parentNotiId;
-    std::string groupId;
-    std::string notificationType;
-    std::string remoteSubText;
-    std::string remoteTag;
-    std::string remoteResultKey;
-    std::string enhancedNotification;
-
-    int remoteId;
-    int remoteUserId;
-    int pageNumber;
-    int remoteCount;
-
-    double remotePostTime;
-
-    bool isUnDeletable = false;
-    bool isRemoteNotification = true;
-    bool saveRemoteNotification = true;
-    bool remoteAlert = false;
-
-    JUtil::Error error;
-
-    const char* caller = NULL;
-    caller = NotificationService::instance()->getCaller(msg, NULL);
-
-    if(!caller)
-    {
-        errText = "Unknown Source";
-        goto Done;
-    }
-    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller);
-
-    // Check for Caller Id
-    checkCaller = Utils::extractSourceIdFromCaller(caller);
-    LOG_DEBUG("cb_createRemoteNotification Caller = %s, %d", checkCaller.c_str(), std::string(checkCaller).compare(PRIVILEGED_SOURCE));
-
-    if (std::string(checkCaller).compare(PRIVILEGED_SOURCE) != 0 && std::string(checkCaller).compare(PRIVILEGED_CLOUDLINK_SOURCE) != 0)
-    {
-        LOG_WARNING(MSGID_CA_PERMISSION_DENY, 0, "Caller is neither privileged source nor part of aggregators in %s", __PRETTY_FUNCTION__);
-        success = false;
-        errText = "Permission Denied";
-        goto Done;
-    }
-
-    request = JUtil::parse(LSMessageGetPayload(msg), "createRemoteNotification", &error);
-
-    if(request.isNull())
-    {
-        LOG_WARNING(MSGID_CA_PARSE_FAIL, 0, "Message parsing error in %s", __PRETTY_FUNCTION__ );
-        errText = "Message is not parsed.";
-        goto Done;
-    }
-
-    remoteSourceId = request["remoteSourceId"].asString();
-
-    if(remoteSourceId.length() != 0)
-    {
-        if (std::string(remoteSourceId).compare(PRIVILEGED_SOURCE) != 0)
-        {
-            LOG_WARNING(MSGID_CA_PERMISSION_DENY, 0, "Caller is neither privileged source nor part of aggregators in %s", __PRETTY_FUNCTION__);
-            success = false;
-            errText = "remoteSourceId is possible only remotenotification";
-            goto Done;
-        }
-    }
-
-    remoteSourceId = checkCaller;
-    postCreateRemoteNoti.put("remoteSourceId", remoteSourceId);
-
-    parentNotiId = request["parentNotiId"].asString();
-
-    if(parentNotiId.length() != 0)
-    {
-        postCreateRemoteNoti.put("parentNotiId", parentNotiId);
-    }
-
-    remoteMessage = request["remoteMessage"].asString();
-    if(remoteMessage.length() == 0)
-    {
-        LOG_WARNING(MSGID_CA_MSG_EMPTY, 0, "Empty message is given in %s", __PRETTY_FUNCTION__);
-        errText = "remoteMessage can't be empty";
-        goto Done;
-    }
-    else
-    {
-        std::replace_if(remoteMessage.begin(), remoteMessage.end(), Utils::isEscapeChar, ' ');
-        postCreateRemoteNoti.put("remoteMessage", remoteMessage);
-    }
-
-    remotePackageName = request["remotePackageName"].asString();
-    if(remotePackageName.length() == 0)
-    {
-        LOG_WARNING(MSGID_CA_MSG_EMPTY, 0, "Empty remotePackageName is given in %s", __PRETTY_FUNCTION__);
-        errText = "remotePackageName can't be empty";
-        goto Done;
-    }
-    else
-    {
-        postCreateRemoteNoti.put("remotePackageName", remotePackageName);
-    }
-
-    if(!request["remoteTitle"].isNull())
-    {
-        remoteTitle = request["remoteTitle"].asString();
-        std::replace_if(remoteTitle.begin(), remoteTitle.end(), Utils::isEscapeChar, ' ');
-    }
-    else
-    {
-        remoteTitle = "";
-    }
-    postCreateRemoteNoti.put("remoteTitle", remoteTitle);
-
-    if(!request["remoteTickerText"].isNull())
-    {
-        remoteTickerText = request["remoteTickerText"].asString();
-        std::replace_if(remoteTickerText.begin(), remoteTickerText.end(), Utils::isEscapeChar, ' ');
-        postCreateRemoteNoti.put("remoteTickerText", remoteTickerText);
-    }
-
-    if(!request["remoteId"].isNull())
-    {
-        remoteId = request["remoteId"].asNumber<int32_t>();
-        postCreateRemoteNoti.put("remoteId", remoteId);
-    }
-
-    if(!request["remoteUserId"].isNull())
-    {
-        remoteUserId = request["remoteUserId"].asNumber<int32_t>();
-        postCreateRemoteNoti.put("remoteUserId", remoteUserId);
-    }
-
-    if(!request["remotePostTime"].isNull())
-    {
-        remotePostTime = request["remotePostTime"].asNumber<double>();
-        postCreateRemoteNoti.put("remotePostTime", remotePostTime);
-    }
-
-    if(!request["remoteAppName"].isNull())
-    {
-        remoteAppName = request["remoteAppName"].asString();
-        postCreateRemoteNoti.put("remoteAppName", remoteAppName);
-    }
-    else
-    {
-        LOG_WARNING(MSGID_CLA_ALERTID_MISSING, 0, "remoteAppName is missing in %s", __PRETTY_FUNCTION__);
-        errText = "remoteAppName can't be Empty";
-        goto Done;
-    }
-
-    if(!request["remoteBgImage"].isNull())
-    {
-        remoteBgImage = request["remoteBgImage"].asString();
-        if(remoteBgImage.length() != 0 && Utils::verifyFileExist(remoteBgImage.c_str()))
-        {
-            postCreateRemoteNoti.put("remoteBgImage", remoteBgImage);
-        }
-        else
-        {
-            postCreateRemoteNoti.put("remoteBgImage", Settings::instance()->getDefaultIcon("alert"));
-        }
-    }
-
-    if(!request["remoteIconUrl"].isNull())
-    {
-        remoteIconPath = request["remoteIconUrl"].asString();
-        if(remoteIconPath.length() != 0 && Utils::verifyFileExist(remoteIconPath.c_str()))
-        {
-            postCreateRemoteNoti.put("remoteIconUrl", remoteIconPath);
-        }
-        else
-        {
-            postCreateRemoteNoti.put("remoteIconUrl", Settings::instance()->getDefaultIcon("alert"));
-        }
-    }
-
-    if(!request["remoteActionParam"].isNull())
-    {
-        remoteActionParam = request["remoteActionParam"];
-
-        if(remoteActionParam.isArray())
-        {
-            if(remoteActionParam.arraySize() == 0)
-            {
-                LOG_WARNING(MSGID_CLA_ALERTID_MISSING, 0, "Noti ID is missing in %s", __PRETTY_FUNCTION__);
-                errText = "remoteActionParam can't be Empty";
-                goto Done;
-            }
-            for(ssize_t index = 0; index < remoteActionParam.arraySize() ; ++index)
-            {
-                if(!remoteActionParam[index].isNull())
-                {
-                    removeActionArray.put(index, remoteActionParam[index]);
-                }
-                else
-                {
-                    LOG_WARNING(MSGID_CLA_PARSE_FAIL, 0, "Parsing Error in %s", __PRETTY_FUNCTION__ );
-                    errText = "remoteActionParam can't be null";
-                    goto Done;
-                }
-            }
-            postCreateRemoteNoti.put("remoteActionParam", removeActionArray);
-        }
-    }
-
-    if(!request["isUnDeletable"].isNull())
-    {
-        isUnDeletable = request["isUnDeletable"].asBool();
-        postCreateRemoteNoti.put("isUnDeletable", isUnDeletable);
-    }
-    else
-    {
-        postCreateRemoteNoti.put("isUnDeletable", isUnDeletable);
-    }
-
-    if(!request["isRemoteNotification"].isNull())
-    {
-        isRemoteNotification = request["isRemoteNotification"].asBool();
-        postCreateRemoteNoti.put("isRemoteNotification", isRemoteNotification);
-    }
-    else
-    {
-        postCreateRemoteNoti.put("isRemoteNotification", isRemoteNotification);
-    }
-
-    if(!request["groupId"].isNull())
-    {
-        groupId = request["groupId"].asString();
-        if(groupId.length() != 0)
-        {
-            postCreateRemoteNoti.put("groupId", groupId);
-        }
-    }
-
-    if(!request["notificationType"].isNull())
-    {
-        notificationType = request["notificationType"].asString();
-        if(notificationType.length() != 0)
-        {
-            postCreateRemoteNoti.put("notificationType", notificationType);
-        }
-    }
-
-    if(!request["pageNumber"].isNull())
-    {
-        pageNumber = request["pageNumber"].asNumber<int32_t>();
-        postCreateRemoteNoti.put("pageNumber", pageNumber);
-    }
-
-    if(!request["remoteSubText"].isNull())
-    {
-        remoteSubText = request["remoteSubText"].asString();
-        if(remoteSubText.length() != 0)
-        {
-            postCreateRemoteNoti.put("remoteSubText", remoteSubText);
-        }
-    }
-
-    if(!request["remoteCount"].isNull())
-    {
-        remoteCount = request["remoteCount"].asNumber<int32_t>();
-        postCreateRemoteNoti.put("remoteCount", remoteCount);
-    }
-
-    if(!request["remoteTag"].isNull())
-    {
-        remoteTag = request["remoteTag"].asString();
-        if(remoteTag.length() != 0)
-        {
-            postCreateRemoteNoti.put("remoteTag", remoteTag);
-        }
-    }
-
-    if(!request["remoteResultKey"].isNull())
-    {
-        remoteResultKey = request["remoteResultKey"].asString();
-        postCreateRemoteNoti.put("remoteResultKey", remoteResultKey);
-    }
-
-    if(!request["remoteAlert"].isNull())
-    {
-        remoteAlert = request["remoteAlert"].asBool();
-        postCreateRemoteNoti.put("remoteAlert", remoteAlert);
-    }
-
-    if(!request["enhancedNotification"].isNull())
-    {
-        enhancedNotification = request["enhancedNotification"].asString();
-        postCreateRemoteNoti.put("enhancedNotification", enhancedNotification);
-    }
-
-    Utils::createTimestamp(timestamp);
-
-    postCreateRemoteNoti.put("remoteNotiId", (remoteSourceId + "-" + timestamp));
-    postCreateRemoteNoti.put("timestamp", (timestamp));
-  //  postCreateRemoteNoti.put("notiInfo", createRemoteNotiInfo);
-    postCreateRemoteNoti.put("saveRemoteNotification", saveRemoteNotification);
-
-    //Post the message
-    NotificationService::instance()->postNotification(postCreateRemoteNoti, false, false);
-    success = true;
-
-Done:
-    pbnjson::JValue json = pbnjson::Object();
-    json.put("returnValue", success);
-
-    if(!success)
-    {
-        json.put("errorText", errText);
-    }
-    else
-    {
-        json.put("remoteNotiId", (remoteSourceId+ "-" + timestamp));
-    }
-
-    std::string result = JUtil::jsonToString(json);
-    if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
-    {
-        return false;
-    }
-
-    return true;
-}
-
 bool NotificationService::postToastNotification(pbnjson::JValue toastNotificationPayload, bool staleMsg, bool persistentMsg, std::string &errorText)
 {
     LSErrorSafe lserror;
@@ -2450,6 +1524,24 @@ bool NotificationService::postToastNotification(pbnjson::JValue toastNotificatio
     return true;
 }
 
+bool NotificationService::postToastCountNotification(pbnjson::JValue toastCountPayload, bool staleMsg, bool persistentMsg, std::string &errorText)
+{
+    LSErrorSafe lserror;
+    std::string countPayload;
+
+    //Add returnValue to true
+    toastCountPayload.put("returnValue", true);
+    countPayload = pbnjson::JGenerator::serialize(toastCountPayload, pbnjson::JSchemaFragment("{}"));
+
+    if(!LSSubscriptionPost(getHandle(), get_category(), "getToastCount", countPayload.c_str(), &lserror))
+    {
+        errorText = lserror.message;
+        return false;
+    }
+
+    return true;
+}
+
 bool NotificationService::postAlertNotification(pbnjson::JValue alertNotificationPayload, std::string &errorText)
 {
 	LSErrorSafe lserror;
@@ -2480,39 +1572,6 @@ bool NotificationService::postAlertNotification(pbnjson::JValue alertNotificatio
     }
 
     return true;
-}
-
-bool NotificationService::postInputAlertNotification(pbnjson::JValue inputAlertNotificationPayload, std::string &errorText)
-{
-    LSErrorSafe lserror;
-    std::string alertPayload;
-
-    //Add returnValue to true
-    inputAlertNotificationPayload.put("returnValue", true);
-
-    alertPayload = pbnjson::JGenerator::serialize(inputAlertNotificationPayload, pbnjson::JSchemaFragment("{}"));
-
-    if(!LSSubscriptionPost(getHandle(), get_category(), "getInputAlertNotification", alertPayload.c_str(), &lserror))
-    {
-        errorText = lserror.message;
-        return false;
-    }
-
-    return true;
-}
-
-void NotificationService::postPincodePromptNotification(pbnjson::JValue pincodePromptNotificationPayload)
-{
-	LSErrorSafe lserror;
-	std::string pincodePromptPayload;
-
-	//Add returnValue to true
-	pincodePromptNotificationPayload.put("returnValue", true);
-
-	pincodePromptPayload = pbnjson::JGenerator::serialize(pincodePromptNotificationPayload, pbnjson::JSchemaFragment("{}"));
-
-	if(!LSSubscriptionPost(getHandle(), get_category(), "getPincodePromptNotification", pincodePromptPayload.c_str(), &lserror))
-		return;
 }
 
 //->Start of API documentation comment block
@@ -3004,101 +2063,6 @@ Done:
 	return true;
 }
 
-//->Start of API documentation comment block
-/**
-@page com_webos_notification com.webos.notification
-@{
-@section com_webos_notification_closeInputAlert closeInputAlert
-
-Closes the alert that is being displayed
-
-@par Parameters
-Name | Required | Type | Description
------|----------|------|------------
-inputAlertId | yes  | String | It should be the same id that was received when creating alert
-
-@par Returns(Call)
-Name | Required | Type | Description
------|----------|------|------------
-returnValue | yes | Boolean | True
-
-@par Returns(Subscription)
-None
-
-@}
-*/
-//->End of API documentation comment block
-
-bool NotificationService::cb_closeInputAlert(LSHandle* lshandle, LSMessage *msg, void *user_data)
-{
-    LSErrorSafe lserror;
-
-    bool success = false;
-
-    std::string inputAlertId;
-    std::string errText;
-    std::string timestamp;
-
-    pbnjson::JValue request;
-    pbnjson::JValue postAlertMessage;
-    pbnjson::JValue alertInfo;
-
-    JUtil::Error error;
-
-    request = JUtil::parse(LSMessageGetPayload(msg), "closeInputAlert", &error);
-
-    if(request.isNull())
-    {
-        LOG_WARNING(MSGID_CLIA_PARSE_FAIL, 0, "Parsing Error in %s", __PRETTY_FUNCTION__ );
-        errText = "Message is not parsed";
-        goto Done;
-    }
-
-    inputAlertId = request["inputAlertId"].asString();
-    if(inputAlertId.length() == 0)
-    {
-        LOG_WARNING(MSGID_CLIA_ALERTID_MISSING, 0, "Input Alert ID is missing in %s", __PRETTY_FUNCTION__);
-        errText = "Input Alert Id can't be Empty";
-        goto Done;
-    }
-
-    timestamp = Utils::extractTimestampFromId(inputAlertId);
-    if(timestamp.empty())
-    {
-        LOG_WARNING(MSGID_CLIA_ALERTID_PARSE_FAIL, 0, "Unable to extract timestamp from inputAlertId in %s", __PRETTY_FUNCTION__);
-        errText = "Input Alert Id parse error";
-        goto Done;
-    }
-
-    postAlertMessage = pbnjson::Object();
-    alertInfo = pbnjson::Object();
-
-    alertInfo.put("timestamp", timestamp);
-    postAlertMessage.put("alertAction", "close");
-    postAlertMessage.put("alertInfo", alertInfo);
-
-    //Post the message
-    success = NotificationService::instance()->postInputAlertNotification(postAlertMessage, errText);
-
-Done:
-    pbnjson::JValue json = pbnjson::Object();
-    json.put("returnValue", success);
-
-    if(!success)
-    {
-        json.put("errorText", errText);
-    }
-
-    std::string result = pbnjson::JGenerator::serialize(json, pbnjson::JSchemaFragment("{}"));
-    if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
-    {
-        return false;
-    }
-
-    return true;
-}
-
-
 void NotificationService::postNotification(pbnjson::JValue notificationPayload, bool remove, bool removeAll)
 {
     LSErrorSafe lserror;
@@ -3138,8 +2102,9 @@ void NotificationService::postNotification(pbnjson::JValue notificationPayload, 
     //Remove all message
     else
     {
-        LOG_DEBUG("==== postNotification removeAll ====");
-        History::instance()->purgeAllData();
+        LOG_DEBUG("==== postNotification remove user notifications ====");
+        int displayId = notificationPayload["displayId"].asNumber<int>();
+        History::instance()->resetUserNotifications(displayId);
     }
 
     if(!LSSubscriptionPost(getHandle(), get_category(), "getNotification", notiPayload.c_str(), &lserror))
@@ -3163,8 +2128,8 @@ bool NotificationService::cb_removeNotification(LSHandle* lshandle, LSMessage *m
 
     JUtil::Error error;
 
-    const char* caller = NotificationService::instance()->getCaller(msg, "");
-    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller);
+    std::string caller = LSUtils::getCallerId(msg);
+    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller.c_str());
 
     request = JUtil::parse(LSMessageGetPayload(msg), "removeNotification", &error);
 
@@ -3263,154 +2228,6 @@ Done:
     return true;
 }
 
-bool NotificationService::cb_removeRemoteNotification(LSHandle* lshandle, LSMessage *msg, void *user_data)
-{
-    LSErrorSafe lserror;
-
-    bool success = false;
-
-    std::string errText;
-    std::string timestamp;
-    std::string removeRemoteNotiByPkgName;
-    std::string checkCaller;
-
-    pbnjson::JValue request;
-    pbnjson::JValue postRemoveRemoteNotiMessage = pbnjson::Object();
-    pbnjson::JValue remoteNotiIdArray;
-    pbnjson::JValue removeRemoteNotiInfo = pbnjson::Array();
-
-    JUtil::Error error;
-
-    History* getReq = NULL;
-
-    const char* caller = NULL;
-    caller = NotificationService::instance()->getCaller(msg, NULL);
-
-    if(!caller)
-    {
-        errText = "Unknown Source";
-        goto Done;
-    }
-    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller);
-
-    checkCaller = Utils::extractSourceIdFromCaller(caller);
-    LOG_DEBUG("cb_removeRemoteNotification Caller = %s, %d, %d", checkCaller.c_str(), std::string(checkCaller).compare(PRIVILEGED_SOURCE), std::string(checkCaller).compare(PRIVILEGED_APP_SOURCE));
-
-    // Check for Caller Id
-    if (std::string(checkCaller).compare(PRIVILEGED_SOURCE) != 0 && std::string(checkCaller).compare(PRIVILEGED_APP_SOURCE) != 0 &&
-        std::string(checkCaller).compare(PRIVILEGED_CLOUDLINK_SOURCE) != 0)
-    {
-        LOG_WARNING(MSGID_CA_PERMISSION_DENY, 0, "Caller is neither privileged source nor part of aggregators in %s", __PRETTY_FUNCTION__);
-        success = false;
-        errText = "Permission Denied";
-        goto Done;
-    }
-
-    request = JUtil::parse(LSMessageGetPayload(msg), "removeRemoteNotification", &error);
-
-    if(request.isNull())
-    {
-        LOG_WARNING(MSGID_CLA_PARSE_FAIL, 0, "Parsing Error in %s", __PRETTY_FUNCTION__ );
-        errText = "Message is not parsed.";
-        goto Done;
-    }
-
-    if(request["remotePackageName"].isNull() && request["removeRemoteNotiId"].isNull())
-    {
-        LOG_WARNING(MSGID_CLA_PARSE_FAIL, 0, "Parsing Error in %s", __PRETTY_FUNCTION__ );
-        errText = "input remotePackageName or removeRemoteNotiId parameter";
-        goto Done;
-    }
-
-    if(!request["remotePackageName"].isNull())
-    {
-        removeRemoteNotiByPkgName = request["remotePackageName"].asString();
-        if(removeRemoteNotiByPkgName.length() == 0)
-        {
-            LOG_WARNING(MSGID_CT_MSG_EMPTY, 0, "Empty sourceId is given in %s", __PRETTY_FUNCTION__);
-            errText = "sourceId can't be empty";
-            goto Done;
-        }
-        else
-        {
-            postRemoveRemoteNotiMessage.put("remotePackageName", removeRemoteNotiByPkgName);
-        }
-    }
-
-    if(!request["removeRemoteNotiId"].isNull())
-    {
-        remoteNotiIdArray = request["removeRemoteNotiId"];
-
-        if(remoteNotiIdArray.isArray())
-        {
-            if(remoteNotiIdArray.arraySize() == 0)
-            {
-                LOG_WARNING(MSGID_CLA_ALERTID_MISSING, 0, "remoteNotiId is missing in %s", __PRETTY_FUNCTION__);
-                errText = "remoteNotiId can't be Empty";
-                goto Done;
-            }
-            for(ssize_t index = 0; index < remoteNotiIdArray.arraySize() ; ++index)
-            {
-                if(!remoteNotiIdArray[index].isNull())
-                {
-                    timestamp = Utils::extractTimestampFromId(remoteNotiIdArray[index].asString());
-
-                    if(timestamp.empty())
-                    {
-                        LOG_WARNING(MSGID_CLA_PARSE_FAIL, 0, "Parsing Error in %s", __PRETTY_FUNCTION__ );
-                        errText = "remoteNotiId parse error";
-                        goto Done;
-                    }
-                    LOG_DEBUG("timestamp = %s", timestamp.c_str());
-                    LOG_DEBUG("remoteNotiIdArray = %d, %s", index, remoteNotiIdArray[index].asString().c_str());
-                    removeRemoteNotiInfo.put(index, remoteNotiIdArray[index]);
-                }
-                else
-                {
-                    LOG_WARNING(MSGID_CLA_PARSE_FAIL, 0, "Parsing Error in %s", __PRETTY_FUNCTION__ );
-                    errText = "notiId can't be null";
-                    goto Done;
-                }
-            }
-            postRemoveRemoteNotiMessage.put("removeRemoteNotiId", removeRemoteNotiInfo);
-        }
-    }
-
-    getReq = new History();
-
-    if(getReq)
-    {
-        success = getReq->deleteRemoteNotiMessage(lshandle, postRemoveRemoteNotiMessage);
-        if (!success)
-        {
-            errText = "can't delete the remote notification info from db";
-        }
-    }
-
-Done:
-    pbnjson::JValue json = pbnjson::Object();
-    json.put("returnValue", success);
-
-    if(remoteNotiIdArray.arraySize() != 0)
-        json.put("removeRemoteNotiId", removeRemoteNotiInfo);
-    if(removeRemoteNotiByPkgName.length() != 0)
-        json.put("remotePackageName", removeRemoteNotiByPkgName);
-
-    if(!success)
-    {
-        json.put("errorText", errText);
-    }
-
-    std::string result = JUtil::jsonToString(json);
-    LOG_DEBUG("==== removeRemoteNotification Payload ==== %s", result.c_str());
-    if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
-    {
-        return false;
-    }
-
-    return true;
-}
-
 bool NotificationService::cb_removeAllNotification(LSHandle* lshandle, LSMessage *msg, void *user_data)
 {
     LSErrorSafe lserror;
@@ -3424,19 +2241,24 @@ bool NotificationService::cb_removeAllNotification(LSHandle* lshandle, LSMessage
 
     JUtil::Error error;
 
-    const char* caller = NULL;
-    caller = NotificationService::instance()->getCaller(msg, NULL);
+    pbnjson::JValue request;
+    int displayId;
+    std::string errorText = "";
+    pbnjson::JValue setCountParams = pbnjson::Object();
+    std::string displayCategory;
+    pbnjson::JValue countKeyObj = pbnjson::Object();
 
-    if(!caller)
+    std::string caller = LSUtils::getCallerId(msg);
+    if(caller.empty())
     {
         errText = "Unknown Source";
         goto Done;
     }
-    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller);
+    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller.c_str());
 
     // Check for Caller Id
     checkCaller = Utils::extractSourceIdFromCaller(caller);
-    LOG_DEBUG("cb_removeAllNotification Caller = %s, %d", checkCaller.c_str(), std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_SOURCE));
+    LOG_DEBUG("cb_removeAllNotification Caller = %s, %zu", checkCaller.c_str(), std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_SOURCE));
     if (std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_SOURCE) == std::string::npos)
     {
         LOG_WARNING(MSGID_CA_PERMISSION_DENY, 0, "Caller is neither privileged source nor part of aggregators in %s", __PRETTY_FUNCTION__);
@@ -3445,16 +2267,28 @@ bool NotificationService::cb_removeAllNotification(LSHandle* lshandle, LSMessage
         goto Done;
     }
 
+    request = JUtil::parse(LSMessageGetPayload(msg), "removeAllNotification", &error);
+    if (request.hasKey("displayId"))
+    {
+        displayId = request["displayId"].asNumber<int>();
+        LOG_DEBUG("Display ID: %d", displayId);
+    }
+    LOG_DEBUG("Remove Payload: %s", JUtil::jsonToString(request).c_str());
+
     postRemoveAllNotiMessage.put("removeAllNotiId", true);
+    postRemoveAllNotiMessage.put("displayId", displayId);
 
     //Post the message
     NotificationService::instance()->postNotification(postRemoveAllNotiMessage, false, true);
     success = true;
+    toastCountVector[displayId].readCount = 0;
+    toastCountVector[displayId].unreadCount = 0;
 
 Done:
     pbnjson::JValue json = pbnjson::Object();
     json.put("returnValue", success);
     json.put("removeAllNotiId", success);
+    json.put("displayId", displayId);
 
     if(!success)
     {
@@ -3490,15 +2324,13 @@ bool NotificationService::cb_getNotificationInfo(LSHandle* lshandle, LSMessage *
 
     History* getReq = NULL;
 
-    const char* caller = NULL;
-    caller = NotificationService::instance()->getCaller(msg, NULL);
-
-    if(!caller)
+    std::string caller = LSUtils::getCallerId(msg);
+    if(caller.empty())
     {
         errText = "Unknown Source";
         goto Done;
     }
-    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller);
+    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller.c_str());
 
     request = JUtil::parse(LSMessageGetPayload(msg), "getNotificationInfo", &error);
 
@@ -3601,50 +2433,37 @@ Done:
     return true;
 }
 
-bool NotificationService::cb_getRemoteNotificationInfo(LSHandle* lshandle, LSMessage *msg, void *user_data)
+bool NotificationService::cb_getToastList(LSHandle* lshandle, LSMessage *msg, void *user_data)
 {
     LSErrorSafe lserror;
 
     bool success = false;
 
-    std::string remotePackageName;
-    std::string remoteSourceId;
+    std::string sourceId;
     std::string errText;
     std::string timestamp;
-    std::string checkCaller;
 
     bool all = false;
+    bool privilegedSource = false;
+
+    int displayId;
 
     pbnjson::JValue request;
-    pbnjson::JValue postNotiInfoMessage;
+    pbnjson::JValue postToastInfoMessage;
 
     JUtil::Error error;
 
     History* getReq = NULL;
 
-    const char* caller = NULL;
-    caller = NotificationService::instance()->getCaller(msg, NULL);
-
-    if(!caller)
+    std::string caller = LSUtils::getCallerId(msg);
+    if(caller.empty())
     {
         errText = "Unknown Source";
         goto Done;
     }
-    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller);
+    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller.c_str());
 
-    checkCaller = Utils::extractSourceIdFromCaller(caller);
-    LOG_DEBUG("cb_getRemoteNotificationInfo Caller = %s, %d, %d", checkCaller.c_str(), std::string(checkCaller).compare(PRIVILEGED_SOURCE), std::string(checkCaller).compare(PRIVILEGED_APP_SOURCE));
-
-    // Check for Caller Id
-    if (std::string(checkCaller).compare(PRIVILEGED_SOURCE) != 0 && std::string(checkCaller).compare(PRIVILEGED_APP_SOURCE) != 0)
-    {
-        LOG_WARNING(MSGID_CA_PERMISSION_DENY, 0, "Caller is neither privileged source nor part of aggregators in %s", __PRETTY_FUNCTION__);
-        success = false;
-        errText = "Permission Denied";
-        goto Done;
-    }
-
-    request = JUtil::parse(LSMessageGetPayload(msg), "getRemoteNotificationInfo", &error);
+    request = JUtil::parse(LSMessageGetPayload(msg), "getToastList", &error);
 
     if(request.isNull())
     {
@@ -3653,68 +2472,35 @@ bool NotificationService::cb_getRemoteNotificationInfo(LSHandle* lshandle, LSMes
         goto Done;
     }
 
-    postNotiInfoMessage = pbnjson::Object();
+    postToastInfoMessage = pbnjson::Object();
 
-    if(!request["all"].isNull())
+    getReq = new History();
+
+    displayId = request["displayId"].asNumber<int>();
+    postToastInfoMessage.put("displayId", displayId);
+
+    if(Settings::instance()->isPrivilegedSource(caller))
     {
-        getReq = new History();
-        all = request["all"].asBool();
-        postNotiInfoMessage.put("all", all);
-
-        // get notification info about sourceId
-        if(all == false)
-        {
-            remotePackageName= request["remotePackageName"].asString();
-            if(remotePackageName.length() == 0)
-            {
-                LOG_WARNING(MSGID_CA_CALLERID_MISSING, 0, "%s : invalid remotePackageName specified", __PRETTY_FUNCTION__);
-                errText = "Invalid remotePackageName specified";
-                goto Done;
-            }
-            else
-            {
-                postNotiInfoMessage.put("remotePackageName", remotePackageName);
-
-                if(getReq)
-                {
-                    success = getReq->selectRemoteMessage(lshandle, remotePackageName, msg);
-                    if (!success)
-                    {
-                        errText = "can't get the remote notification info from db";
-                    }
-                }
-            }
-        }
-        // get all notification info
-        else
-        {
-             remotePackageName= request["remotePackageName"].asString();
-             if(remotePackageName.length() != 0)
-             {
-                 LOG_WARNING("don't input remotePackageName", 0, "%s : invalid remotePackageName specified", __PRETTY_FUNCTION__);
-                 errText = "Do not input remotePackageName when all is true";
-                 goto Done;
-             }
-
-            if(getReq)
-            {
-                success = getReq->selectRemoteMessage(lshandle, "all", msg);
-                if (!success)
-                {
-                    errText = "can't get the remote notification info from db";
-                }
-            }
-        }
+        privilegedSource = true;
     }
-    else
+
+    if(!privilegedSource)
     {
-        LOG_WARNING(MSGID_CLA_ALERTID_MISSING, 0, "all is missing in %s", __PRETTY_FUNCTION__);
-        errText = "all can't be Empty";
+        LOG_WARNING(MSGID_PERMISSION_DENY, 0, "Permission Denied in %s", __PRETTY_FUNCTION__);
+        errText = "Permission Denied";
         goto Done;
     }
 
-    success = true;
+    postToastInfoMessage.put("sourceId", sourceId);
 
+    if(getReq)
+    {
+        success = getReq->selectToastMessage(lshandle, sourceId, msg);
+        if (!success)
+        {
+            errText = "can't get the notification info from db";
+        }
+    }
 Done:
     pbnjson::JValue json = pbnjson::Object();
     json.put("returnValue", success);
@@ -3732,7 +2518,6 @@ Done:
 
     return true;
 }
-
 
 bool NotificationService::cb_launch(LSHandle* lshandle, LSMessage *msg, void *user_data)
 {
@@ -3924,17 +2709,6 @@ void NotificationService::processNotiMsgQueue()
     }
 }
 
-void NotificationService::processInputAlertMsgQueue()
-{
-    while(!inputAlertMsgQueue.empty())
-    {
-        std::string errText;
-        NotificationService::instance()->postInputAlertNotification(inputAlertMsgQueue.front(), errText);
-
-        inputAlertMsgQueue.pop();
-    }
-}
-
 void NotificationService::processToastMsgQueue()
 {
 	std::string errText;
@@ -3946,45 +2720,6 @@ void NotificationService::processToastMsgQueue()
         LOG_DEBUG("processToastMsgQueue toastMsgQueue = %s", JUtil::jsonToString(toastPayload).c_str());
         toastMsgQueue.pop();
     }
-}
-
-void NotificationService::resetPincode_message()
-{
-	LOG_DEBUG("resetPincode_message cur - %p , %s in %s",m_pincode_message, __func__, __FILE__ );
-	m_pincode_message = NULL;
-	LOG_DEBUG("resetPincode_message reset - %p , %s in %s",m_pincode_message, __func__, __FILE__ );
-}
-
-void NotificationService::setPincode_message(LSMessage *msg)
-{
-
-	LOG_DEBUG("setPincode_message -%p , %s in %s",msg, __func__, __FILE__ );
-
-	m_pincode_message = msg;
-}
-
-bool NotificationService::getPincode_message(LSMessage **msg)
-{
-	if (m_pincode_message == NULL)
-		return false;
-
-	*msg = m_pincode_message;
-	LOG_DEBUG("getPincode_message -0x%p , %s in %s",msg, __func__, __FILE__ );
-
-	return true;
-}
-
-bool NotificationService::checkUnacceptablePincode(const std::string &rPincode)
-{
-	// If french(FRA) country code, 0000 can not be set.
-	// Spec. UX_2015_Beehive_Advanced Settings_v1.5_140825, 155 p.
-	if (Settings::instance()->m_system_country == "FRA" && rPincode == "0000")
-	{
-		LOG_WARNING(MSGID_RP_PINCODE_INVALID, 0, "Prevent certain password for specific country in %s", __PRETTY_FUNCTION__);
-		return true;
-	}
-
-	return false;
 }
 
 void NotificationService::onAlertStatus(bool enabled)
@@ -4006,28 +2741,6 @@ NotificationService::NotiMsgItem::NotiMsgItem(pbnjson::JValue payload, bool remo
     this->remove = remove;
     this->removeAll = removeAll;
 };
-
-void NotificationService::onPincodePromptStatus(bool enabled)
-{
-    LOG_DEBUG("onPincodePromptStaus : %d", enabled);
-    if (!enabled)
-    {
-        if (m_pincode_message)
-        {
-            pbnjson::JValue reply = pbnjson::Object();
-            reply.put("returnValue", false);
-            reply.put("errorText", "Pincode UI is not available");
-
-            if(!LSMessageRespond(m_pincode_message, JUtil::jsonToString(reply).c_str(), NULL))
-            {
-            	LOG_ERROR(MSGID_FAILED_TO_RESPOND, 2, PMLOGKS("SERVICE_NAME", get_service_name()), PMLOGKS("ERROR_MESSAGE", "Failed to respond"), "Failed to respond in %s", __PRETTY_FUNCTION__);      	
-            }
-
-            LSMessageUnref(m_pincode_message);
-            resetPincode_message();
-        }
-    }
-}
 
 //Parsing XML
 bool NotificationService::parseDoc(const char *docname)
@@ -4097,5 +2810,51 @@ bool NotificationService::parseDoc(const char *docname)
         LOG_ERROR(MSGID_XML_PARSING_ERROR, 1 ,PMLOGKS("libxml++ exception:", ex.what()),"");
         return false;
     }
+    return true;
+}
+bool NotificationService::cb_setToastStatus(LSHandle *lshandle, LSMessage *msg, void *user_data)
+{
+    bool success = false;
+
+    pbnjson::JValue json = pbnjson::Object();
+    std::string errText = "";
+    LSErrorSafe lserror;
+
+    json = JUtil::parse(LSMessageGetPayload(msg), "", nullptr);
+
+    std::string toastId = json["toastId"].asString();
+    bool status = json["readStatus"].asBool();
+    int displayId = json["displayId"].asNumber<int>();
+
+    success = History::instance()->setReadStatus(toastId, status);
+
+    if(!success)
+    {
+        json.put("errorText", "Failed to set status");
+        json.put("returnValue", false);
+    }
+    else
+    {
+        json.put("returnValue", true);
+        if (status)
+        {
+            toastCountVector[displayId].readCount++;
+            if (toastCountVector[displayId].unreadCount > 0)
+                toastCountVector[displayId].unreadCount--;
+        }
+        else
+        {
+            toastCountVector[displayId].unreadCount++;
+            if (toastCountVector[displayId].readCount > 0)
+                toastCountVector[displayId].readCount--;
+        }
+    }
+
+    std::string result = pbnjson::JGenerator::serialize(json, pbnjson::JSchemaFragment("{}"));
+    if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
+    {
+        return false;
+    }
+
     return true;
 }

@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -368,12 +368,8 @@ std::string Settings::getDefaultIcon(const std::string type)
 	}
 }
 
-bool Settings::isPrivilegedSource(const char* caller)
+bool Settings::isPrivilegedSource(const std::string &callerId)
 {
-	if(!caller)
-		return false;
-
-	std::string callerId = std::string(caller);
 	if(callerId.find("com.palm.",0) == std::string::npos && callerId.find("com.webos.", 0) == std::string::npos && callerId.find("com.lge.",0) == std::string::npos)
 	{
 		return false;

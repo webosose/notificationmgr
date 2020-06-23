@@ -111,7 +111,17 @@ bool History::selectMessage(LSHandle* lshandle, const std::string& id, LSMessage
     LSMessageRef(message);
     replyMsg = message;
 
-    gchar* query = "";
+    pbnjson::JValue request;
+    JUtil::Error error;
+
+    request = JUtil::parse(LSMessageGetPayload(message), "", &error);
+
+    if(request.isNull())
+    {
+        return false;
+    }
+
+    gchar* query = NULL;
 
     if(id == "all")
     {
@@ -130,6 +140,36 @@ bool History::selectMessage(LSHandle* lshandle, const std::string& id, LSMessage
     }
     g_free (query);
     LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d]", __FUNCTION__, __LINE__);
+    return true;
+}
+
+bool History::selectToastMessage(LSHandle* lshandle, const std::string& id, LSMessage *message)
+{
+    LSErrorSafe lserror;
+
+    LSMessageRef(message);
+    replyMsg = message;
+
+    pbnjson::JValue request;
+    JUtil::Error error;
+
+    request = JUtil::parse(LSMessageGetPayload(message), "", &error);
+
+    if(request.isNull())
+    {
+        return false;
+    }
+
+    pbnjson::JValue find_query = pbnjson::JObject();
+    int display_id = request["displayId"].asNumber<int>(); //NotificationService::instance()->getDisplayId();
+    pbnjson::JValue toast_request = pbnjson::JObject{{"from", DB8_KIND},
+                                               {"where", pbnjson::JArray{{{"prop", "displayId"}, {"op", "="}, {"val", display_id}}}}};
+    find_query.put("query", toast_request);
+    if (LSCallOneReply(lshandle, "palm://com.palm.db/find",
+                       JUtil::jsonToString(find_query).c_str(),
+                       History::cbDb8getToastResponse, this, NULL, &lserror) == false) {
+                       LOG_WARNING(MSGID_SAVE_MSG_FAIL, 0, "Select Message to History table call failed in %s", __PRETTY_FUNCTION__ );
+    }
     return true;
 }
 
@@ -551,6 +591,141 @@ Done:
     return true;
 }
 
+bool History::cbDb8getToastResponse(LSHandle* lshandle, LSMessage *message, void *user_data)
+{
+    LSErrorSafe lserror;
+    std::string errText;
+
+    pbnjson::JValue request;
+    pbnjson::JValue resultArray;
+    pbnjson::JValue toastInfoArray = pbnjson::Array();
+
+    History* object = (History*)user_data;
+    LSMessage* getToastReplyMsg = object->getReplyMsg();
+
+    JUtil::Error error;
+
+    bool success = false;
+
+    request = JUtil::parse(LSMessageGetPayload(message), "", &error);
+    std::string testJson = JUtil::jsonToString(request);
+
+    if(request.isNull())
+    {
+        LOG_WARNING(MSGID_DB8_NULL_RESP, 0, "Db8 LS2 response is empty in %s", __PRETTY_FUNCTION__ );
+        errText = "Message is not parsed";
+        goto Done;
+    }
+
+    if(!request["returnValue"].asBool())
+    {
+        LOG_WARNING(MSGID_DB8_CALL_FAILED, 0, "Call to Db8 to get message failed in %s", __PRETTY_FUNCTION__ );
+        errText = "Call to Db8 to get message failed";
+        goto Done;
+    }
+
+    resultArray = request["results"];
+
+    if(resultArray.isArray())
+    {
+        if(resultArray.arraySize() == 0)
+        {
+            LOG_DEBUG("DB result is 0 %s", __PRETTY_FUNCTION__);
+        }
+
+        for(ssize_t index = 0; index < resultArray.arraySize() ; ++index) {
+            pbnjson::JValue toastInfoObj = pbnjson::Object();
+            if(!resultArray[index]["sourceId"].isNull())
+            {
+                toastInfoObj.put("sourceId", resultArray[index]["sourceId"]);
+            }
+            if(!resultArray[index]["toastId"].isNull())
+            {
+                toastInfoObj.put("toastId", resultArray[index]["notiId"]);
+            }
+			else
+            {
+                std::string sourceId = resultArray[index]["sourceId"].asString();
+                std::string timestamp = resultArray[index]["timestamp"].asString();
+                toastInfoObj.put("toastId", (sourceId + "-" + timestamp));
+            }
+            if(!resultArray[index]["timestamp"].isNull())
+            {
+                toastInfoObj.put("timestamp", resultArray[index]["timestamp"]);
+            }
+            if(!resultArray[index]["iconUrl"].isNull())
+            {
+                toastInfoObj.put("iconUrl", resultArray[index]["iconUrl"]);
+            }
+            if(!resultArray[index]["iconPath"].isNull())
+            {
+                toastInfoObj.put("iconPath", resultArray[index]["iconPath"]);
+            }
+            if(!resultArray[index]["title"].isNull())
+            {
+                toastInfoObj.put("title", resultArray[index]["title"]);
+            }
+            if(!resultArray[index]["message"].isNull())
+            {
+                toastInfoObj.put("message", resultArray[index]["message"]);
+            }
+            if(!resultArray[index]["isSysReq"].isNull())
+            {
+                toastInfoObj.put("isSysReq", resultArray[index]["isSysReq"]);
+            }
+            if(!resultArray[index]["displayId"].isNull())
+            {
+                toastInfoObj.put("displayId", resultArray[index]["displayId"]);
+            }
+            if(!resultArray[index]["user"].isNull())
+            {
+                toastInfoObj.put("user", resultArray[index]["user"]);
+            }
+            if(!resultArray[index]["schedule"].isNull())
+            {
+                toastInfoObj.put("schedule", resultArray[index]["schedule"]);
+            }
+            if(!resultArray[index]["type"].isNull())
+            {
+                toastInfoObj.put("type", resultArray[index]["type"]);
+            }
+            if(!resultArray[index]["action"].isNull())
+            {
+                toastInfoObj.put("action", resultArray[index]["action"]);
+            }
+            if(!resultArray[index]["readStatus"].isNull())
+            {
+                toastInfoObj.put("readStatus", resultArray[index]["readStatus"]);
+            }
+            toastInfoArray.put(index, toastInfoObj);
+        }
+    }
+
+    success = true;
+
+Done:
+    pbnjson::JValue json = pbnjson::Object();
+    json.put("returnValue", success);
+    json.put("toastInfo", toastInfoArray);
+    // json.put("count", resultArray.arraySize());
+
+    if(!success)
+    {
+        json.put("errorText", errText);
+    }
+
+    std::string result = JUtil::jsonToString(json);
+    LOG_DEBUG("==== cbDb8getToastResponse Payload ==== %s", result.c_str());
+
+    if(!LSMessageReply( lshandle, getToastReplyMsg, result.c_str(), &lserror))
+    {
+        return false;
+    }
+
+    LSMessageUnref(getToastReplyMsg);
+    return true;
+}
+
 bool History::cbDb8getRemoteNotiResponse(LSHandle* lshandle, LSMessage *message, void *user_data)
 {
     LSErrorSafe lserror;
@@ -566,7 +741,6 @@ bool History::cbDb8getRemoteNotiResponse(LSHandle* lshandle, LSMessage *message,
     JUtil::Error error;
 
     bool success = false;
-
     request = JUtil::parse(LSMessageGetPayload(message), "", &error);
 
     LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d]", __FUNCTION__, __LINE__);
@@ -755,6 +929,56 @@ bool History::purgeAllData()
     }
     g_free (query);
 
+    return true;
+}
+
+bool History::resetUserNotifications(int displayId)
+{
+    LSErrorSafe lserror;
+
+    pbnjson::JValue remove_query = pbnjson::Object();
+    pbnjson::JValue request;
+
+    request = pbnjson::JObject{{"from", DB8_KIND},
+                               {"where", pbnjson::JArray{{{"prop", "displayId"}, {"op", "="}, {"val", displayId}}}}};
+    remove_query.put("query", request);
+
+    if (LSCallOneReply(NotificationService::instance()->getHandle(),"palm://com.palm.db/del",
+                       JUtil::jsonToString(remove_query).c_str(),
+                       History::cbDb8Response,NULL,NULL, &lserror) == false) {
+            LOG_WARNING(MSGID_PURGE_FAIL, 0,"PurgeAllData Db8 LS2 call failed in %s", __PRETTY_FUNCTION__ );
+    }
+
+    return true;
+}
+
+bool History::setReadStatus(std::string toastId, bool readStatus)
+{
+    LSErrorSafe lserror;
+    pbnjson::JValue request;
+    pbnjson::JValue statusObj = pbnjson::Object();
+    pbnjson::JValue merge_query = pbnjson::Object();
+
+    int pos = toastId.find("-");
+    std::string timestamp = toastId.substr(pos + 1);
+
+    statusObj.put("readStatus", readStatus);
+    request = pbnjson::JObject{
+                {"from", DB8_KIND},
+                {"where", pbnjson::JArray{{{"prop", "timestamp"}, {"op", "="}, {"val", timestamp.c_str()}}}}};
+    merge_query.put("query", request);
+    merge_query.put("props", statusObj);
+
+    std::string msgPayload = pbnjson::JGenerator::serialize(merge_query, pbnjson::JSchemaFragment("{}"));
+
+    LOG_DEBUG("[setReadStatus] query: %s", msgPayload.c_str());
+
+    if (LSCallOneReply(NotificationService::instance()->getHandle(),"luna://com.webos.service.db/merge",
+                            msgPayload.c_str(),
+                            History::cbDb8Response,NULL,NULL, &lserror) == false) {
+                 LOG_WARNING(MSGID_SAVE_MSG_FAIL, 0, "Set Status to History table call failed in %s", __PRETTY_FUNCTION__ );
+                 return false;
+    }
     return true;
 }
 

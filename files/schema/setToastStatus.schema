@@ -1,0 +1,10 @@
+{
+    "id"    : "setToastStatus",
+    "type"  : "object",
+    "properties" : {
+        "toastId" : {"type" : "string"},
+        "readStatus" : {"type" : "boolean"},
+        "displayId" : {"type" : "number"}
+    },
+    "required": ["toastId", "readStatus", "displayId"]
+}

@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -33,13 +33,17 @@ public:
     static bool cbDb8Response(LSHandle* lshandle, LSMessage *message, void *user_data);
     static bool cbDb8getNotiResponse(LSHandle * lshandle,LSMessage * message,void * user_data);
     static bool cbDb8getRemoteNotiResponse(LSHandle * lshandle,LSMessage * message,void * user_data);
+    static bool cbDb8getToastResponse(LSHandle* lshandle, LSMessage *message, void *user_data);
 
     void saveMessage(pbnjson::JValue msg);
     void deleteMessage(const std::string &key, const std::string& value);
     bool purgeAllData();
     bool purgeExpireData();
+    bool setReadStatus(std::string toastId, bool readStatus);
+    bool resetUserNotifications(int displayId);
 
     bool selectMessage(LSHandle* lshandle, const std::string& id, LSMessage *message);
+    bool selectToastMessage(LSHandle* lshandle, const std::string& id, LSMessage *message);
     bool selectRemoteMessage(LSHandle* lshandle, const std::string& id, LSMessage *message);
     bool deleteNotiMessage(pbnjson::JValue notificationPayload);
     bool deleteRemoteNotiMessage(LSHandle* lsHandle, pbnjson::JValue notificationPayload);

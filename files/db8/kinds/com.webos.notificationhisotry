@@ -5,8 +5,12 @@
         {"name":"timestamp", "props":[{"name":"timestamp"}]},
         {"name":"revision", "props":[{"name":"_rev"}]},
         {"name":"sourceId", "props":[{"name":"sourceId"}]},
+        {"name":"user", "props":[{"name":"user"}]},
+        {"name":"displayId", "props":[{"name":"displayId"}]},
+        {"name":"toastId", "props":[{"name":"toastId"}]},
         {"name":"expire", "props":[{"name":"schedule.expire"}]},
         {"name":"scheduleExpireAndTimestamp", "props":[{"name":"schedule.expire"},{"name":"timestamp"}]},
+        {"name":"DisplayIdAndReadStatus", "props":[{"name":"displayId"},{"name":"readStatus"}]},
         {
             "name": "notiId",
             "props": [

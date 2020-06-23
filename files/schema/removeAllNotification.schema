@@ -1,0 +1,10 @@
+{
+    "id"    : "removeAllNotification",
+    "type"  : "object",
+    "properties" : {
+        "displayId" : {
+            "type": "number",
+            "optional": true
+        }
+    }
+}

@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2020 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -48,10 +48,9 @@ public:
 	int getRetentionPeriod();
 	std::string getDefaultIcon(const std::string type);
 
-	bool isPrivilegedSource(const char* callerId);
+	bool isPrivilegedSource(const std::string& callerId);
 
 	static bool cbGetSystemProperties(LSHandle* lshandle, LSMessage *message, void *user_data);
-	static bool cbTVServiceBusStatusNotification(LSHandle* lshandle, LSMessage *message, void *user_data);
 	static bool cbSettingServiceBusStatusNotification(LSHandle* lshandle, LSMessage *message, void *user_data);
 	static bool cb_getSystemSettingForOption(LSHandle* lshandle, LSMessage *msg, void *user_data);
 	static bool cb_getSystemSettingForPIN(LSHandle* lshandle, LSMessage *msg, void *user_data);
@@ -59,11 +58,11 @@ public:
 	static bool cbSystemSettingsStatusNotification(LSHandle* lshandle, LSMessage *message, void *user_data);
 
 private:
-	uint32_t m_disableToastTimestamp; 
+	uint32_t m_disableToastTimestamp;
 	int m_thresholdTimer;
 	int m_retentionPeriod;
 	std::vector<std::string> m_notificationAggregator;
-	
+
 public:
 	std::string m_system_pincode;
 	std::string m_system_country;

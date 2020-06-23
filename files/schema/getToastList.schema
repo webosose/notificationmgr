@@ -1,0 +1,9 @@
+{
+    "id"    : "getToastList",
+    "type"  : "object",
+    "properties" : {
+        "sourceId" : {"type" : "string", "optional" : true},
+        "displayId" : {"type" : "number"}
+    },
+    "required": ["displayId"]
+}
