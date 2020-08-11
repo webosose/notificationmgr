@@ -226,7 +226,8 @@ bool NotificationService::cb_getNotification(LSHandle* lshandle, LSMessage *msg,
     checkCaller = Utils::extractSourceIdFromCaller(caller);
     LOG_DEBUG("cb_getNotification Caller = %s", checkCaller.c_str());
 
-    if (std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_SOURCE) != std::string::npos)
+    if ((std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_SOURCE) != std::string::npos)
+       ||(std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_NOTI) != std::string::npos))
     {
         subscribeUI = true;
         if(LSMessageIsSubscription(msg))
