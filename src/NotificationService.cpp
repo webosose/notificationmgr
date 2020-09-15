@@ -278,6 +278,9 @@ bool NotificationService::cb_getToastCount(LSHandle* lshandle, LSMessage *msg, v
     std::string method = LSUtils::getMethod(msg);
     LOG_DEBUG("cb_getToastCount Caller = %s", checkCaller.c_str());
 
+    pbnjson::JValue request = pbnjson::Object();
+    request = JUtil::parse(LSMessageGetPayload(msg), "", nullptr);
+
     if ((std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_SOURCE) != std::string::npos )
        ||(std::string(checkCaller).find(PRIVILEGED_SYSTEM_UI_NOTI) != std::string::npos))
     {
@@ -294,8 +297,28 @@ bool NotificationService::cb_getToastCount(LSHandle* lshandle, LSMessage *msg, v
         PMLOGKS("subscribed", subscribed ? "true" : "false"), " ");
 
     pbnjson::JValue json = pbnjson::Object();
-    json.put("returnValue", true);
-    json.put("subscribed", subscribed);
+
+    if (!request["displayId"].isNumber())
+    {
+        json.put("returnValue", false);
+        json.put("errorText", "displayId should be a number");
+    }
+    else
+    {
+        int displayId = request["displayId"].asNumber<int>();
+        if (displayId != 0 && displayId != 1)
+        {
+            json.put("returnValue", false);
+            json.put("errorText", "Invalid displayId. Must be 0 or 1");
+        }
+        else
+        {
+            json.put("readCount", toastCountVector[displayId].readCount);
+            json.put("unreadCount", toastCountVector[displayId].unreadCount);
+            json.put("returnValue", true);
+            json.put("subscribed", subscribed);
+        }
+    }
 
     if (subscribeUI && subscribed)
     {
@@ -2827,6 +2850,51 @@ bool NotificationService::cb_setToastStatus(LSHandle *lshandle, LSMessage *msg, 
     bool status = json["readStatus"].asBool();
     int displayId = json["displayId"].asNumber<int>();
 
+    if (!json.hasKey("toastId"))
+    {
+        LOG_DEBUG("Missing toastId parameter");
+        json.put("errorText", "Missing toastId parameter");
+        json.put("returnValue", false);
+        goto Done;
+    }
+    else if(json.hasKey("toastId") && !json["toastId"].isString())
+    {
+        LOG_DEBUG("toastId should be a string");
+        json.put("errorText", "toastId should be a string");
+        json.put("returnValue", false);
+        goto Done;
+    }
+    else
+    {
+        toastId = json["toastId"].asString();
+        if(toastId.find("com.palm.",0) == std::string::npos && toastId.find("com.webos.", 0) == std::string::npos && toastId.find("com.lge.",0) == std::string::npos)
+        {
+            LOG_DEBUG("Invalid toastId");
+            json.put("errorText", "Invalid toastId");
+            json.put("returnValue", false);
+            goto Done;
+        }
+    }
+
+    if (!json.hasKey("readStatus"))
+    {
+        LOG_DEBUG("Missing readStatus parameter");
+        json.put("errorText", "Missing readStatus parameter");
+        json.put("returnValue", false);
+        goto Done;
+    }
+    else if(json.hasKey("readStatus") && !json["readStatus"].isBoolean())
+    {
+        LOG_DEBUG("readStatus should be a boolean value");
+        json.put("errorText", "readStatus should be a boolean value");
+        json.put("returnValue", false);
+        goto Done;
+    }
+    else
+    {
+        status = json["readStatus"].asBool();
+    }
+
     success = History::instance()->setReadStatus(toastId, status);
 
     if(!success)
@@ -2851,6 +2919,7 @@ bool NotificationService::cb_setToastStatus(LSHandle *lshandle, LSMessage *msg, 
         }
     }
 
+Done:
     std::string result = pbnjson::JGenerator::serialize(json, pbnjson::JSchemaFragment("{}"));
     if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
     {
