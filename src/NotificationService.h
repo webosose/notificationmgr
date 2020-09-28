@@ -55,6 +55,7 @@ public:
     static bool cb_setToastStatus(LSHandle *lshandle, LSMessage *msg, void *user_data);
     static bool cb_createToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_createAlert(LSHandle* lshandle, LSMessage *msg, void *user_data);
+    static bool cb_createAlertIsAllowed(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_enableToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_disableToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_closeToast(LSHandle* lshandle, LSMessage *msg, void *user_data);

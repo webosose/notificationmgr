@@ -1218,7 +1218,70 @@ bool NotificationService::cb_createAlert(LSHandle* lshandle, LSMessage *msg, voi
 	data->serviceNameCreateAlert = NotificationService::instance()->getServiceName(msg);
 	data->postCreateAlert = postCreateAlert;
 
+	std::string params = "{\"uri\": \"" + uri + "\", \"requester\": \"" + data->serviceNameCreateAlert + "\"}";
+        if(!LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/isCallAllowed", params.c_str(), cb_createAlertIsAllowed, data, NULL, &lserror))
+        {
+                delete data;
+                return alertRespondWithError(msg, sourceId, alertId, title, message, std::string("Call failed - ") + lserror.message);
+        }
 	return true;
+}
+
+bool NotificationService::cb_createAlertIsAllowed(LSHandle* lshandle, LSMessage *msg, void *user_data)
+{
+        AlertData *data = static_cast<AlertData*>(user_data);
+        LSErrorSafe lserror;
+        JUtil::Error error;
+        pbnjson::JValue request = JUtil::parse(LSMessageGetPayload(msg), "", &error);
+
+        LSMessage* message = data->message;
+        std::string sourceId = data->sourceId;
+        std::string alertId = data->alertId;
+        std::string alertTitle = data->alertTitle;
+        std::string alertMessage = data->alertMessage;
+        pbnjson::JValue postCreateAlert = data->postCreateAlert;
+        std::string uriVerified = data->uriVerified;
+
+        if(request.isNull())
+        {
+                LOG_WARNING(MSGID_CA_PARSE_FAIL, 0, "Message parsing error in %s", __PRETTY_FUNCTION__ );
+                delete data;
+                return alertRespondWithError(message, sourceId, alertId, alertTitle, alertMessage, "Message is not parsed");
+        }
+
+        if(!request["returnValue"].asBool())
+        {
+
+            LOG_WARNING(MSGID_CA_MSG_EMPTY, 0, "Call failed in %s", __PRETTY_FUNCTION__ );
+            delete data;
+                return alertRespondWithError(message, sourceId, alertId, alertTitle, alertMessage, "Call failed");
+        }
+
+        if(!request["allowed"].asBool())
+        {
+                delete data;
+                return alertRespondWithError(message, sourceId, alertId, alertTitle, alertMessage, "Not allowed to call method specified in the uri: " + uriVerified);
+        }
+
+        if(data->uriList.empty())
+        {
+                delete data;
+                return alertRespond(message, sourceId, alertId, alertTitle, alertMessage, postCreateAlert);
+        }
+
+        std::string uri = data->uriList.back();
+        data->uriList.pop_back();
+
+        data->uriVerified = uri;
+
+        std::string params = "{\"uri\": \"" + uri + "\", \"requester\": \"" + data->serviceNameCreateAlert + "\"}";
+        if(!LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/isCallAllowed", params.c_str(), cb_createAlertIsAllowed, data, NULL, &lserror))
+        {
+                delete data;
+                return alertRespondWithError(message, sourceId, alertId, alertTitle, alertMessage, std::string("Call failed - ") + lserror.message);
+        }
+
+        return true;
 }
 
 bool NotificationService::cb_setSystemSetting(LSHandle* lshandle, LSMessage *msg, void *user_data)
