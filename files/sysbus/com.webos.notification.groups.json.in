@@ -1,0 +1,6 @@
+{
+    "allowedNames" : [],
+    "notification.operation" : ["dev"],
+    "notification.management" : ["oem"]
+}
+
