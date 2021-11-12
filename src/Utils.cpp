@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2021 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -85,7 +85,7 @@ char* readFile(const char* filePath)
 std::string extractTimestampFromId(const std::string& id)
 {
     std::string time_stamp;
-    unsigned pos = id.rfind("-");
+    std::size_t pos = id.rfind("-");
     if (pos != std::string::npos)
         time_stamp = id.substr(pos + 1);
     return time_stamp;
@@ -94,7 +94,7 @@ std::string extractTimestampFromId(const std::string& id)
 std::string extractSourceIdFromCaller(const std::string& id)
 {
     std::string sourceId;
-    unsigned pos = id.rfind(" ");
+    std::size_t pos = id.rfind(" ");
     if (pos != std::string::npos)
     {
         sourceId = id.substr(0,pos);
