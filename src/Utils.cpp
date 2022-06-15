@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2021 LG Electronics, Inc.
+// Copyright (c) 2013-2022 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -61,16 +61,15 @@ char* readFile(const char* filePath)
 		return 0;
 	}
 
-	char* ptr = new char[sz+1];
+        char* ptr = new char[sz];
 	if( !ptr )
 	{
 		fclose(fp);
 		return 0;
 	}
 	
-	ptr[sz] = 0;
-
 	size_t result = fread(ptr, sz, 1, fp);
+        ptr[sz - 1] = 0;
 	if( result != 1 )
 	{
 		delete[] ptr;
