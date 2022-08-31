@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2020 LG Electronics, Inc.
+// Copyright (c) 2013-2022 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -56,22 +56,14 @@ public:
     static bool cb_createToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_createAlert(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_createAlertIsAllowed(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_enableToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_disableToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_closeToast(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_closeAlert(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_closeAllAlerts(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_enable(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_disable(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_getSystemSetting(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_setSystemSetting(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_getSystemSettingForCountry(LSHandle* lshandle, LSMessage *msg, void *user_data);
 
-    static bool cb_createNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_removeNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool cb_removeAllNotification(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_getNotificationInfo(LSHandle* lshandle, LSMessage *msg, void *user_data);
-    static bool cb_launch(LSHandle* lshandle, LSMessage *msg, void *user_data);
     static bool parseDoc(const char *docname);
 
     bool postToastNotification(pbnjson::JValue toastNotificationPayload, bool staleMsg, bool persistentMsg, std::string &errorText);
