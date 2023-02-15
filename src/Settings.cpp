@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2020 LG Electronics, Inc.
+// Copyright (c) 2013-2023 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -238,10 +238,12 @@ bool Settings::cb_getSystemSettingForOption(LSHandle* lshandle, LSMessage *msg, 
 			PMLOGKS("enableToastPopup", enableToast.c_str()), " ");
 	}
 
-	if (Settings::instance()->m_store_mode == "store" && Settings::instance()->m_enable_toast == "off")
-		UiStatus::instance().toast().setSilence(true);
-	else
-		UiStatus::instance().toast().setSilence(false);
+        if (UiStatus::instance().toast()) {
+            if (Settings::instance()->m_store_mode == "store" && Settings::instance()->m_enable_toast == "off")
+                (UiStatus::instance().toast())->setSilence(true);
+            else
+                (UiStatus::instance().toast())->setSilence(false);
+        }
 
 	return true;
 }
@@ -295,17 +297,21 @@ void Settings::setBlockNotication(bool substrateMode, bool powerOnlyMode, bool i
 	LOG_DEBUG("Current system properties: substraceMode(%s), powerOnlyMode(%s), instopCompleted(%s)",
 			  substrateMode? "true" : "false", powerOnlyMode? "true" : "false", instopCompleted? "true" : "false");
 
-	if (powerOnlyMode || !substrateMode) {
-		UiStatus::instance().toast().enable(UiStatus::ENABLE_SYSTEM);
-	} else {
-		UiStatus::instance().toast().disable(UiStatus::ENABLE_SYSTEM);
-	}
+        if (UiStatus::instance().toast()) {
+            if (powerOnlyMode || !substrateMode) {
+                (UiStatus::instance().toast())->enable(UiStatus::ENABLE_SYSTEM);
+            } else {
+                (UiStatus::instance().toast())->disable(UiStatus::ENABLE_SYSTEM);
+            }
+        }
 
-	if (!powerOnlyMode && !substrateMode && instopCompleted) {
-		UiStatus::instance().alert().enable(UiStatus::ENABLE_SYSTEM);
-	} else {
-		UiStatus::instance().alert().disable(UiStatus::ENABLE_SYSTEM);
-	}
+        if (UiStatus::instance().alert()) {
+            if (!powerOnlyMode && !substrateMode && instopCompleted) {
+                (UiStatus::instance().alert())->enable(UiStatus::ENABLE_SYSTEM);
+            } else {
+                (UiStatus::instance().alert())->disable(UiStatus::ENABLE_SYSTEM);
+            }
+        }
 }
 
 bool Settings::disableToastNotification()

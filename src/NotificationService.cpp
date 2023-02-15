@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2022 LG Electronics, Inc.
+// Copyright (c) 2013-2023 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -83,10 +83,11 @@ using namespace std::placeholders;
 NotificationService::NotificationService()
     : UI_ENABLED(false), BLOCK_ALERT_NOTIFICATION(false), BLOCK_TOAST_NOTIFICATION(false)
 {
-	m_service = 0;
-    m_connAlertStatus = UiStatus::instance().alert().sigStatus.connect(
+    m_service = 0;
+    if (UiStatus::instance().alert())
+        m_connAlertStatus = (UiStatus::instance().alert())->sigStatus.connect(
         std::bind(&NotificationService::onAlertStatus, this, _1)
-    );
+        );
 }
 
 NotificationService::~NotificationService()
@@ -318,8 +319,8 @@ bool NotificationService::cb_getToastCount(LSHandle* lshandle, LSMessage *msg, v
     if (subscribeUI && subscribed)
     {
         Utils::async([=] {
-            if (method == "getToastCount")
-                UiStatus::instance().toast().enable(UiStatus::ENABLE_UI);
+            if (method == "getToastCount" && UiStatus::instance().toast())
+                (UiStatus::instance().toast())->enable(UiStatus::ENABLE_UI);
         });
 
         //BreadnutMergeTODO: Below 2 lines are not working properly
@@ -398,41 +399,41 @@ None
 
 bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, void *user_data)
 {
-	int displayId = 0;
-	LSErrorSafe lserror;
+    int displayId = 0;
+    LSErrorSafe lserror;
 
-	bool success = false;
+    bool success = false;
 
-	std::string errText;
-	std::string sourceId;
-	std::string message;
-	std::string target;
-	std::string launchAppId;
-	std::string iconPath;
-	bool noaction = false;
-	bool staleMsg = false;
-	bool persistentMsg = false;
-	bool privilegedSource = false;
-	std::string title;
-	std::string type;
-	bool isSysReq = false;
-        bool isCradleReq = false;
-        bool ignoreDisable = false;
+    std::string errText;
+    std::string sourceId;
+    std::string message;
+    std::string target;
+    std::string launchAppId;
+    std::string iconPath;
+    bool noaction = false;
+    bool staleMsg = false;
+    bool persistentMsg = false;
+    bool privilegedSource = false;
+    std::string title;
+    std::string type;
+    bool isSysReq = false;
+    bool isCradleReq = false;
+    bool ignoreDisable = false;
 
-	pbnjson::JValue request;
-	pbnjson::JValue postCreateToast;
-	pbnjson::JValue onclick;
-	pbnjson::JValue action;
-	pbnjson::JValue appMgrParams;
+    pbnjson::JValue request;
+    pbnjson::JValue postCreateToast;
+    pbnjson::JValue onclick;
+    pbnjson::JValue action;
+    pbnjson::JValue appMgrParams;
 
-	pbnjson::JValue reqSchedule;
-	pbnjson::JValue schedule;
+    pbnjson::JValue reqSchedule;
+    pbnjson::JValue schedule;
 
-	pbnjson::JValue reqExtra;
+    pbnjson::JValue reqExtra;
 
-	std::string timestamp;
+    std::string timestamp;
 
-	JUtil::Error error;
+    JUtil::Error error;
 
     std::string errorText;
     pbnjson::JValue getActiveUserParams;
@@ -441,7 +442,7 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
     int readCount, unreadCount = 0;
 
     std::string caller = LSUtils::getCallerId(msg);
-    if(caller.empty())
+    if (caller.empty())
     {
         LOG_WARNING(MSGID_CT_CALLERID_MISSING, 0, "Caller ID is missing in %s", __PRETTY_FUNCTION__);
         errText = "Unknown Source";
@@ -449,117 +450,116 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
     }
     LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "[%s:%d] Caller: %s", __FUNCTION__, __LINE__, caller.c_str());
 
+    request = JUtil::parse(LSMessageGetPayload(msg), "createToast", &error);
 
+    if (request.isNull())
+    {
+        LOG_WARNING(MSGID_CT_PARSE_FAIL, 0, "Message parsing error in %s", __PRETTY_FUNCTION__);
+        errText = "Message is not parsed";
+        goto Done;
+    }
 
-	request = JUtil::parse(LSMessageGetPayload(msg), "createToast", &error);
-
-	if(request.isNull())
-	{
-		LOG_WARNING(MSGID_CT_PARSE_FAIL, 0, "Message parsing error in %s", __PRETTY_FUNCTION__ );
-		errText = "Message is not parsed";
-		goto Done;
-	}
-
-	if(Settings::instance()->isPrivilegedSource(caller) || Settings::instance()->isPartOfAggregators(std::string(caller)))
-	{
-		privilegedSource = true;
-	}
+    if (Settings::instance()->isPrivilegedSource(caller) || Settings::instance()->isPartOfAggregators(std::string(caller)))
+    {
+        privilegedSource = true;
+    }
 
     m_display_id = request["displayId"].asNumber<int>();
-	sourceId = request["sourceId"].asString();
-	if (request.hasKey("displayId"))
-	{
-	    displayId = request["displayId"].asNumber<int>();
-	    LOG_DEBUG("Key Display ID: %d", displayId);
-//	    LOG_INFO("port Key Display ID: %d", displayId);
-	    LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "port [%s:%d] displayId: %d", __FUNCTION__, __LINE__, displayId);
-	}
+    sourceId = request["sourceId"].asString();
+    if (request.hasKey("displayId"))
+    {
+        displayId = request["displayId"].asNumber<int>();
+        LOG_DEBUG("Key Display ID: %d", displayId);
+        // LOG_INFO("port Key Display ID: %d", displayId);
+        LOG_WARNING(MSGID_NOTIFICATIONMGR, 0, "port [%s:%d] displayId: %d", __FUNCTION__, __LINE__, displayId);
+    }
 
-    toastCountVector[displayId].unreadCount++;
+    if (displayId >= 0)
+        toastCountVector[displayId].unreadCount++;
 
-    if(sourceId.length() == 0)
+    if (sourceId.length() == 0)
     {
         sourceId = Utils::extractSourceIdFromCaller(caller);
     }
 
-	// SourceId and Caller should match for non-privileged apps
-	if(!privilegedSource)
-	{
-		if(std::string(caller).find(sourceId, 0) == std::string::npos)
-		{
-		    LOG_WARNING(MSGID_CT_SOURCEID_INVALID, 0, "Source ID is invalid in %s", __PRETTY_FUNCTION__);
-			errText = "Invalid source id specified";
-			goto Done;
-		}
-	}
+    // SourceId and Caller should match for non-privileged apps
+    if (!privilegedSource)
+    {
+        if (std::string(caller).find(sourceId, 0) == std::string::npos)
+        {
+            LOG_WARNING(MSGID_CT_SOURCEID_INVALID, 0, "Source ID is invalid in %s", __PRETTY_FUNCTION__);
+            errText = "Invalid source id specified";
+            goto Done;
+        }
+    }
 
-	message = request["message"].asString();
-	if(message.length() == 0)
-	{
-		LOG_WARNING(MSGID_CT_MSG_EMPTY, 0, "Empty message is given in %s", __PRETTY_FUNCTION__);
-		errText = "Message can't be empty";
-		goto Done;
-	}
+    message = request["message"].asString();
+    if (message.length() == 0)
+    {
+        LOG_WARNING(MSGID_CT_MSG_EMPTY, 0, "Empty message is given in %s", __PRETTY_FUNCTION__);
+        errText = "Message can't be empty";
+        goto Done;
+    }
 
-	title = request["title"].asString();
+    title = request["title"].asString();
 
-        ignoreDisable = request["ignoreDisable"].asBool();
+    ignoreDisable = request["ignoreDisable"].asBool();
 
-	if (!ignoreDisable && !UiStatus::instance().toast().isEnabled(UiStatus::ENABLE_ALL & ~UiStatus::ENABLE_UI))
-	{
-		errText = "Toast is blocked by " + UiStatus::instance().toast().reason();
-		goto Done;
-	}
+    if (!ignoreDisable && UiStatus::instance().toast() && !(UiStatus::instance().toast())->isEnabled(UiStatus::ENABLE_ALL & ~UiStatus::ENABLE_UI))
+    {
+        errText = "Toast is blocked by " + (UiStatus::instance().toast())->reason();
+        goto Done;
+    }
 
-	postCreateToast = pbnjson::Object();
-	postCreateToast.put("sourceId", sourceId);
-	postCreateToast.put("displayId", displayId);
-	action = pbnjson::Object();
+    postCreateToast = pbnjson::Object();
+    postCreateToast.put("sourceId", sourceId);
+    postCreateToast.put("displayId", displayId);
+    action = pbnjson::Object();
 
-	if(Settings::instance()->isPrivilegedSource(caller))
-	{
-		iconPath = request["iconUrl"].asString();
-	}
-	else
-	{
-		iconPath = AppList::instance()->getIcon(sourceId);
-	}
+    if (Settings::instance()->isPrivilegedSource(caller))
+    {
+        iconPath = request["iconUrl"].asString();
+    }
+    else
+    {
+        iconPath = AppList::instance()->getIcon(sourceId);
+    }
 
-	if(iconPath.length() != 0 && Utils::verifyFileExist(iconPath.c_str()))
-	{
-		postCreateToast.put("iconUrl", "file://"+iconPath);
-		postCreateToast.put("iconPath", iconPath);
-	}
-	else
-	{
-		postCreateToast.put("iconUrl", "file://"+ Settings::instance()->getDefaultIcon("toast"));
-		postCreateToast.put("iconPath", Settings::instance()->getDefaultIcon("toast"));
-	}
+    if (iconPath.length() != 0 && Utils::verifyFileExist(iconPath.c_str()))
+    {
+        postCreateToast.put("iconUrl", "file://" + iconPath);
+        postCreateToast.put("iconPath", iconPath);
+    }
+    else
+    {
+        postCreateToast.put("iconUrl", "file://" + Settings::instance()->getDefaultIcon("toast"));
+        postCreateToast.put("iconPath", Settings::instance()->getDefaultIcon("toast"));
+    }
 
-	//Remove if there is any space character except ' '
-	std::replace_if(message.begin(), message.end(), Utils::isEscapeChar, ' ');
-	postCreateToast.put("message", message);
+    // Remove if there is any space character except ' '
+    std::replace_if(message.begin(), message.end(), Utils::isEscapeChar, ' ');
+    postCreateToast.put("message", message);
 
     std::replace_if(title.begin(), title.end(), Utils::isEscapeChar, ' ');
     postCreateToast.put("title", title);
 
-	staleMsg = request["stale"].asBool();
-	persistentMsg = request["persistent"].asBool();
+    staleMsg = request["stale"].asBool();
+    persistentMsg = request["persistent"].asBool();
 
-	Utils::createTimestamp(timestamp);
-	postCreateToast.put("timestamp", timestamp);
-	if (SystemTime::instance().isSynced())
-		postCreateToast.put("timesource", SystemTime::instance().getTimeSource());
+    Utils::createTimestamp(timestamp);
+    postCreateToast.put("timestamp", timestamp);
+    if (SystemTime::instance().isSynced())
+        postCreateToast.put("timesource", SystemTime::instance().getTimeSource());
 
     postCreateToast.put("type", request["type"].asString());
 
-	if (!staleMsg && !UiStatus::instance().toast().isEnabled(UiStatus::ENABLE_UI))
-	{
-		errText = "UI is not yet ready";
-		goto Done;
-	}
+    if (!staleMsg && UiStatus::instance().toast() && !(UiStatus::instance().toast())->isEnabled(UiStatus::ENABLE_UI))
+    {
+        errText = "UI is not yet ready";
+        goto Done;
+    }
 
-	if(request["onlyToast"].isNull())
+    if (request["onlyToast"].isNull())
     {
         postCreateToast.put("onlyToast", true);
     }
@@ -568,7 +568,7 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
         postCreateToast.put("onlyToast", request["onlyToast"].asBool());
     }
 
-    if(request["isSysReq"].isNull())
+    if (request["isSysReq"].isNull())
     {
         postCreateToast.put("isSysReq", isSysReq);
     }
@@ -577,8 +577,7 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
         postCreateToast.put("isSysReq", request["isSysReq"].asBool());
     }
 
-
-    if(request["isCradleReq"].isNull())
+    if (request["isCradleReq"].isNull())
     {
         postCreateToast.put("isCradleReq", isCradleReq);
     }
@@ -587,181 +586,184 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
         postCreateToast.put("isCradleReq", request["isCradleReq"].asBool());
     }
 
-	reqSchedule = request["schedule"];
-	if (reqSchedule.isObject())
-	{
-		int64_t expire = 0;
-		if (reqSchedule.hasKey("expire"))
-			expire = reqSchedule["expire"].asNumber<int64_t>();
+    reqSchedule = request["schedule"];
+    if (reqSchedule.isObject())
+    {
+        int64_t expire = 0;
+        if (reqSchedule.hasKey("expire"))
+            expire = reqSchedule["expire"].asNumber<int64_t>();
 
-		if (expire != 0)
-		{
-			if (!SystemTime::instance().isSynced())
-			{
-				errText = std::string("System time is not synced yet");
-				goto Done;
-			}
+        if (expire != 0)
+        {
+            if (!SystemTime::instance().isSynced())
+            {
+                errText = std::string("System time is not synced yet");
+                goto Done;
+            }
 
-			time_t currTime = time(NULL);
-			if (expire < currTime)
-			{
-				errText = std::string("Expire time already has passed: expire(")
-					+ Utils::toString(expire)
-					+ std::string(") < curtime(")
-					+ Utils::toString(currTime)
-					+ std::string(")");
-				goto Done;
-			}
+            time_t currTime = time(NULL);
+            if (expire < currTime)
+            {
+                errText = std::string("Expire time already has passed: expire(")
+                    + Utils::toString(expire)
+                    + std::string(") < curtime(")
+                    + Utils::toString(currTime)
+                    + std::string(")");
+                goto Done;
+            }
 
-			pbnjson::JValue schedule = pbnjson::Object();
-			schedule.put("expire", expire);
-			postCreateToast.put("schedule", schedule);
-		}
-	}
-	else
-	{
-		time_t currTime = time(NULL);
-		int64_t expire = currTime +
-                    (static_cast<int64_t>(Settings::instance()->getRetentionPeriod()) * 24 * 60 * 60);
+            pbnjson::JValue schedule = pbnjson::Object();
+            schedule.put("expire", expire);
+            postCreateToast.put("schedule", schedule);
+        }
+    }
+    else
+    {
+        time_t currTime = time(NULL);
+        int64_t expire = currTime +
+                         (static_cast<int64_t>(Settings::instance()->getRetentionPeriod()) * 24 * 60 * 60);
 
-		pbnjson::JValue schedule = pbnjson::Object();
-		schedule.put("expire", expire);
-		postCreateToast.put("schedule", schedule);
-	}
+        pbnjson::JValue schedule = pbnjson::Object();
+        schedule.put("expire", expire);
+        postCreateToast.put("schedule", schedule);
+    }
 
-	reqExtra = request["extra"];
-	if (reqExtra.isObject())
-	{
-		pbnjson::JValue reqImages = reqExtra["images"];
-		if (reqImages.isArray() && reqImages.arraySize() > 0)
-		{
-			pbnjson::JValue images = pbnjson::Array();
+    reqExtra = request["extra"];
+    if (reqExtra.isObject())
+    {
+        pbnjson::JValue reqImages = reqExtra["images"];
+        if (reqImages.isArray() && reqImages.arraySize() > 0)
+        {
+            pbnjson::JValue images = pbnjson::Array();
 
-			size_t arraySize = reqImages.arraySize();
-			for(size_t i = 0; i < arraySize; ++i)
-			{
-				pbnjson::JValue reqImage = reqImages[i];
-				std::string uri = reqImage["uri"].asString();
+            size_t arraySize = reqImages.arraySize();
+            for (size_t i = 0; i < arraySize; ++i)
+            {
+                pbnjson::JValue reqImage = reqImages[i];
+                std::string uri = reqImage["uri"].asString();
 
-				if (uri.empty())
-				{
-					errText = std::string("image should have uri");
-					goto Done;
-				}
+                if (uri.empty())
+                {
+                    errText = std::string("image should have uri");
+                    goto Done;
+                }
 
-				pbnjson::JValue image = pbnjson::Object();
-				image.put("uri", uri);
-				images.append(image);
-			}
+                pbnjson::JValue image = pbnjson::Object();
+                image.put("uri", uri);
+                images.append(image);
+            }
 
-			postCreateToast.put("images", images);
-		}
-	}
+            postCreateToast.put("images", images);
+        }
+    }
 
-	noaction = request["noaction"].asBool();
-	if(noaction)
-	{
-		postCreateToast.put("action", action);
-		success = NotificationService::instance()->postToastNotification(postCreateToast, staleMsg, persistentMsg, errText);
-		goto Done;
-	}
+    noaction = request["noaction"].asBool();
+    if (noaction)
+    {
+        postCreateToast.put("action", action);
+        success = NotificationService::instance()->postToastNotification(postCreateToast, staleMsg, persistentMsg, errText);
+        goto Done;
+    }
 
-        postCreateToast.put("readStatus", false);
-        postCreateToast.put("user", m_user_name);
-        LOG_DEBUG("Toast Payload: %s", JUtil::jsonToString(postCreateToast).c_str());
+    postCreateToast.put("readStatus", false);
+    postCreateToast.put("user", m_user_name);
+    LOG_DEBUG("Toast Payload: %s", JUtil::jsonToString(postCreateToast).c_str());
 
-	appMgrParams = pbnjson::Object();
-	onclick = request["onclick"];
+    appMgrParams = pbnjson::Object();
+    onclick = request["onclick"];
 
-	if(onclick.isNull()) //launch the app that creates the toast.
-	{
-            postToastCount.put("displayId", displayId);
+    if (onclick.isNull()) // launch the app that creates the toast.
+    {
+        postToastCount.put("displayId", displayId);
+        if (displayId >= 0)
+        {
             postToastCount.put("readCount", toastCountVector[displayId].readCount);
             postToastCount.put("unreadCount", toastCountVector[displayId].unreadCount);
             postToastCount.put("totalCount", toastCountVector[displayId].readCount + toastCountVector[displayId].unreadCount);
-            toastCountStatus = NotificationService::instance()->postToastCountNotification(postToastCount, staleMsg, persistentMsg, errText);
-		//Check the SourceId exist in the App list.
-		if(AppList::instance()->isAppExist(sourceId))
-		{
-			appMgrParams.put("id", sourceId);
-		}
-		else
-		{
-			postCreateToast.put("action", action);
-			success = NotificationService::instance()->postToastNotification(postCreateToast, staleMsg, persistentMsg, errText);
-			goto Done;
-		}
-	}
-	else
-	{
-		launchAppId = onclick["appId"].asString();
-		target = onclick["target"].asString();
-		if(launchAppId.length() != 0)
-		{//check for valid App
-			appMgrParams.put("id", launchAppId);
-			if(!onclick["params"].isNull())
-				appMgrParams.put("params", onclick["params"]);
-		}
-		else if(target.length() != 0)
-		{
-			appMgrParams.put("target", target);
-		}
-		else
-		{
-			//Check the SourceId exist in the App list.
-			if(AppList::instance()->isAppExist(sourceId))
-			{
-				appMgrParams.put("id", sourceId);
-			}
-			else
-			{
-				postCreateToast.put("action", action);
-				success = NotificationService::instance()->postToastNotification(postCreateToast, staleMsg, persistentMsg, errText);
-				goto Done;
-			}
-		}
-	}
-	action.put("serviceURI", APPMGR_LAUNCH_CALL);
-	action.put("serviceMethod", APPMGR_LAUNCH_METHOD);
-	action.put("launchParams", appMgrParams);
-	postCreateToast.put("action", action);
+        }
+        toastCountStatus = NotificationService::instance()->postToastCountNotification(postToastCount, staleMsg, persistentMsg, errText);
+        // Check the SourceId exist in the App list.
+        if (AppList::instance()->isAppExist(sourceId))
+        {
+            appMgrParams.put("id", sourceId);
+        }
+        else
+        {
+            postCreateToast.put("action", action);
+            success = NotificationService::instance()->postToastNotification(postCreateToast, staleMsg, persistentMsg, errText);
+            goto Done;
+        }
+    }
+    else
+    {
+        launchAppId = onclick["appId"].asString();
+        target = onclick["target"].asString();
+        if (launchAppId.length() != 0)
+        { // check for valid App
+            appMgrParams.put("id", launchAppId);
+            if (!onclick["params"].isNull())
+                appMgrParams.put("params", onclick["params"]);
+        }
+        else if (target.length() != 0)
+        {
+            appMgrParams.put("target", target);
+        }
+        else
+        {
+            // Check the SourceId exist in the App list.
+            if (AppList::instance()->isAppExist(sourceId))
+            {
+                appMgrParams.put("id", sourceId);
+            }
+            else
+            {
+                postCreateToast.put("action", action);
+                success = NotificationService::instance()->postToastNotification(postCreateToast, staleMsg, persistentMsg, errText);
+                goto Done;
+            }
+        }
+    }
+    action.put("serviceURI", APPMGR_LAUNCH_CALL);
+    action.put("serviceMethod", APPMGR_LAUNCH_METHOD);
+    action.put("launchParams", appMgrParams);
+    postCreateToast.put("action", action);
 
-	//Post a message
-	success = NotificationService::instance()->postToastNotification(postCreateToast, staleMsg, persistentMsg, errText);
+    // Post a message
+    success = NotificationService::instance()->postToastNotification(postCreateToast, staleMsg, persistentMsg, errText);
 
 Done:
-	pbnjson::JValue json = pbnjson::Object();
-	json.put("returnValue", success);
+    pbnjson::JValue json = pbnjson::Object();
+    json.put("returnValue", success);
 
-	if(!success)
-	{
-            json.put("errorText", errText);
+    if (!success)
+    {
+        json.put("errorText", errText);
 
-            LOG_WARNING(MSGID_NOTIFY_INVOKE_FAILED, 4,
-                PMLOGKS("SOURCE_ID", sourceId.c_str()),
-                PMLOGKS("TYPE", "TOAST"),
-                PMLOGKS("ERROR", errText.c_str()),
-                PMLOGKS("CONTENT", message.c_str()),
-                " ");
-	}
-	else
-	{
-            json.put("toastId", (sourceId + "-" + timestamp));
+        LOG_WARNING(MSGID_NOTIFY_INVOKE_FAILED, 4,
+                    PMLOGKS("SOURCE_ID", sourceId.c_str()),
+                    PMLOGKS("TYPE", "TOAST"),
+                    PMLOGKS("ERROR", errText.c_str()),
+                    PMLOGKS("CONTENT", message.c_str()),
+                    " ");
+    }
+    else
+    {
+        json.put("toastId", (sourceId + "-" + timestamp));
 
-            LOG_INFO_WITH_CLOCK(MSGID_NOTIFY_INVOKE, 3,
-                PMLOGKS("SOURCE_ID", sourceId.c_str()),
-                PMLOGKS("TYPE", "TOAST"),
-                PMLOGKS("CONTENT", message.c_str()),
-                " ");
-	}
+        LOG_INFO_WITH_CLOCK(MSGID_NOTIFY_INVOKE, 3,
+            PMLOGKS("SOURCE_ID", sourceId.c_str()),
+            PMLOGKS("TYPE", "TOAST"),
+            PMLOGKS("CONTENT", message.c_str()),
+            " ");
+    }
 
-	std::string result = pbnjson::JGenerator::serialize(json, pbnjson::JSchemaFragment("{}"));
-	if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
-	{
-		return false;
-	}
+    std::string result = pbnjson::JGenerator::serialize(json, pbnjson::JSchemaFragment("{}"));
+    if (!LSMessageReply(lshandle, msg, result.c_str(), &lserror))
+    {
+        return false;
+    }
 
-	return true;
+    return true;
 }
 
 bool NotificationService::alertRespondWithError(LSMessage* message, const std::string& sourceId, const std::string& alertId, const std::string& alertTitle, const std::string& alertMessage, const std::string& errorText)
@@ -837,7 +839,7 @@ bool NotificationService::alertRespond(bool success, const std::string &errorTex
 
     if (success)
     {
-        if (!UiStatus::instance().alert().isEnabled(UiStatus::ENABLE_UI))
+        if (UiStatus::instance().alert() && !(UiStatus::instance().alert())->isEnabled(UiStatus::ENABLE_UI))
         {
             //save the message in the queue.
             LOG_DEBUG("createAlert: UI is not yet ready. push into msg queue.");
@@ -1001,15 +1003,15 @@ bool NotificationService::cb_createAlert(LSHandle* lshandle, LSMessage *msg, voi
 
         ignoreDisable = request["ignoreDisable"].asBool();
 
-	if (!ignoreDisable && !UiStatus::instance().alert().isEnabled(UiStatus::ENABLE_ALL & ~UiStatus::ENABLE_UI))
-	{
-		return alertRespondWithError(msg, sourceId, alertId, title, message, "Alert is blocked by " + UiStatus::instance().alert().reason());
-	}
+        if (!ignoreDisable && UiStatus::instance().alert() && !(UiStatus::instance().alert())->isEnabled(UiStatus::ENABLE_ALL & ~UiStatus::ENABLE_UI))
+        {
+            return alertRespondWithError(msg, sourceId, alertId, title, message, "Alert is blocked by " + (UiStatus::instance().alert())->reason());
+        }
 
 	//Copy the message
 	//Remove if there is any space character except ' '
-	std::replace_if(message.begin(), message.end(), Utils::isEscapeChar, ' ');
-	alertInfo.put("message", message);
+        std::replace_if(message.begin(), message.end(), Utils::isEscapeChar, ' ');
+        alertInfo.put("message", message);
 
 	//Check the icon and copy it.
 	if(!request["iconUrl"].isNull())
@@ -1210,11 +1212,13 @@ bool NotificationService::cb_createAlert(LSHandle* lshandle, LSMessage *msg, voi
 	data->alertMessage = message;
 	data->uriList = uriList;
 	data->uriVerified = uri;
-	data->serviceNameCreateAlert = NotificationService::instance()->getServiceName(msg);
+        const char *serviceName = NotificationService::instance()->getServiceName(msg);
+        if (serviceName)
+            data->serviceNameCreateAlert = serviceName;
 	data->postCreateAlert = postCreateAlert;
 
 	std::string params = "{\"uri\": \"" + uri + "\", \"requester\": \"" + data->serviceNameCreateAlert + "\"}";
-        if(!LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/isCallAllowed", params.c_str(), cb_createAlertIsAllowed, data, NULL, &lserror))
+        if(!LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/isCallAllowed", params.c_str(), cb_createAlertIsAllowed, data, NULL, &lserror) && lserror.message)
         {
                 delete data;
                 return alertRespondWithError(msg, sourceId, alertId, title, message, std::string("Call failed - ") + lserror.message);
@@ -1270,7 +1274,7 @@ bool NotificationService::cb_createAlertIsAllowed(LSHandle* lshandle, LSMessage 
         data->uriVerified = uri;
 
         std::string params = "{\"uri\": \"" + uri + "\", \"requester\": \"" + data->serviceNameCreateAlert + "\"}";
-        if(!LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/isCallAllowed", params.c_str(), cb_createAlertIsAllowed, data, NULL, &lserror))
+        if(!LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/isCallAllowed", params.c_str(), cb_createAlertIsAllowed, data, NULL, &lserror) && lserror.message)
         {
                 delete data;
                 return alertRespondWithError(message, sourceId, alertId, alertTitle, alertMessage, std::string("Call failed - ") + lserror.message);
@@ -1290,11 +1294,11 @@ bool NotificationService::postToastNotification(pbnjson::JValue toastNotificatio
         History::instance()->saveMessage(toastNotificationPayload);
     }
 
-    if (staleMsg || UiStatus::instance().toast().isSilence())
+    if (staleMsg || (UiStatus::instance().toast() && (UiStatus::instance().toast())->isSilence()))
     {
         std::string reason;
         if (staleMsg) reason = "stale";
-        else if (UiStatus::instance().toast().isSilence()) reason = "silence";
+        else if (UiStatus::instance().toast() && (UiStatus::instance().toast())->isSilence()) reason = "silence";
 
         LOG_INFO(MSGID_NOTIFY_NOTPOST, 1,
                 PMLOGKS("REASON", reason.c_str()),
@@ -1321,7 +1325,7 @@ bool NotificationService::postToastNotification(pbnjson::JValue toastNotificatio
     toastNotificationPayload.put("returnValue", true);
     toastPayload = pbnjson::JGenerator::serialize(toastNotificationPayload, pbnjson::JSchemaFragment("{}"));
 
-    if(!LSSubscriptionPost(getHandle(), get_category(), "getToastNotification", toastPayload.c_str(), &lserror))
+    if(!LSSubscriptionPost(getHandle(), get_category(), "getToastNotification", toastPayload.c_str(), &lserror) && lserror.message)
     {
         errorText = lserror.message;
         return false;
@@ -1339,7 +1343,7 @@ bool NotificationService::postToastCountNotification(pbnjson::JValue toastCountP
     toastCountPayload.put("returnValue", true);
     countPayload = pbnjson::JGenerator::serialize(toastCountPayload, pbnjson::JSchemaFragment("{}"));
 
-    if(!LSSubscriptionPost(getHandle(), get_category(), "getToastCount", countPayload.c_str(), &lserror))
+    if(!LSSubscriptionPost(getHandle(), get_category(), "getToastCount", countPayload.c_str(), &lserror) && lserror.message)
     {
         errorText = lserror.message;
         return false;
@@ -1371,7 +1375,7 @@ bool NotificationService::postAlertNotification(pbnjson::JValue alertNotificatio
 
 	alertPayload = pbnjson::JGenerator::serialize(alertNotificationPayload, pbnjson::JSchemaFragment("{}"));
 
-    if(!LSSubscriptionPost(getHandle(), get_category(), "getAlertNotification", alertPayload.c_str(), &lserror))
+    if(!LSSubscriptionPost(getHandle(), get_category(), "getAlertNotification", alertPayload.c_str(), &lserror) && lserror.message)
     {
         errorText = lserror.message;
         return false;
@@ -1902,8 +1906,10 @@ bool NotificationService::cb_removeAllNotification(LSHandle* lshandle, LSMessage
     //Post the message
     NotificationService::instance()->postNotification(postRemoveAllNotiMessage, false, true);
     success = true;
-    toastCountVector[displayId].readCount = 0;
-    toastCountVector[displayId].unreadCount = 0;
+    if (displayId >= 0) {
+        toastCountVector[displayId].readCount = 0;
+        toastCountVector[displayId].unreadCount = 0;
+    }
 
 Done:
     pbnjson::JValue json = pbnjson::Object();
@@ -2346,17 +2352,20 @@ bool NotificationService::cb_setToastStatus(LSHandle *lshandle, LSMessage *msg, 
     else
     {
         json.put("returnValue", true);
-        if (status)
+        if (displayId >= 0)
         {
-            toastCountVector[displayId].readCount++;
-            if (toastCountVector[displayId].unreadCount > 0)
-                toastCountVector[displayId].unreadCount--;
-        }
-        else
-        {
-            toastCountVector[displayId].unreadCount++;
-            if (toastCountVector[displayId].readCount > 0)
-                toastCountVector[displayId].readCount--;
+            if (status)
+            {
+                toastCountVector[displayId].readCount++;
+                if (toastCountVector[displayId].unreadCount > 0)
+                    toastCountVector[displayId].unreadCount--;
+            }
+            else
+            {
+                toastCountVector[displayId].unreadCount++;
+                if (toastCountVector[displayId].readCount > 0)
+                    toastCountVector[displayId].readCount--;
+            }
         }
     }
 

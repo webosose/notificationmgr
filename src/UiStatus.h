@@ -1,4 +1,4 @@
-// Copyright (c) 2015-2018 LG Electronics, Inc.
+// Copyright (c) 2015-2023 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -93,10 +93,37 @@ public:
 
     bool isEnabled(int mask = ENABLE_ALL) const;
 
-    UiToast& toast() { return *(std::dynamic_pointer_cast<UiToast>(m_comps["toast"])); }
-    UiAlert& alert() { return *(std::dynamic_pointer_cast<UiAlert>(m_comps["alert"])); }
-    UiInput& input() { return *(std::dynamic_pointer_cast<UiInput>(m_comps["input"])); }
-    UiPrompt& prompt() { return *(std::dynamic_pointer_cast<UiPrompt>(m_comps["prompt"])); }
+    UiToast* toast() {
+        auto pos = m_comps.find("toast");
+        if (pos != m_comps.end())
+            return (std::dynamic_pointer_cast<UiToast>(m_comps["toast"]).get());
+        else
+            return nullptr;
+    }
+
+    UiAlert* alert() {
+        auto pos = m_comps.find("alert");
+        if (pos != m_comps.end())
+            return (std::dynamic_pointer_cast<UiAlert>(m_comps["alert"]).get());
+        else
+            return nullptr;
+    }
+
+    UiInput* input() {
+        auto pos = m_comps.find("input");
+        if (pos != m_comps.end())
+            return (std::dynamic_pointer_cast<UiInput>(m_comps["input"]).get());
+        else
+            return nullptr;
+    }
+
+    UiPrompt* prompt() {
+        auto pos = m_comps.find("prompt");
+        if (pos != m_comps.end())
+            return (std::dynamic_pointer_cast<UiPrompt>(m_comps["prompt"]).get());
+        else
+            return nullptr;
+    }
 
 private:
     std::map<std::string, std::shared_ptr<UiComp> > m_comps;

@@ -1,4 +1,4 @@
-// Copyright (c) 2016-2018 LG Electronics, Inc.
+// Copyright (c) 2016-2023 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -29,8 +29,8 @@ static std::string bin2hex(const unsigned char *bin, size_t len)
     for(size_t i = 0; i < len; ++i)
     {
         unsigned char c = (unsigned char)bin[i];
-        res += hex[c >> 4];
-        res += hex[c & 0xf];
+        res += hex[(unsigned int)(c >> 4)];
+        res += hex[(unsigned int)(c & 0xf)];
     }
 
     return res;
