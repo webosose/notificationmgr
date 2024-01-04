@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2022 LG Electronics, Inc.
+// Copyright (c) 2013-2024 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -115,11 +115,7 @@ void createTimestamp(std::string& timestamp)
 
 	//Get the timestamp and add it to message
 	gettimeofday(&tp, NULL);
-#ifndef WEBOS_TARGET_MACHINE_QEMUX86
     timevalue = tp.tv_sec * 1000LL + tp.tv_usec / 1000; //Get the milliseconds.
-#else
-    timevalue = (tp.tv_sec % 1000000) * 1000LL + tp.tv_usec / 1000; //Get the milliseconds
-#endif
 	ss << timevalue;
 
 	timestamp = ss.str();
