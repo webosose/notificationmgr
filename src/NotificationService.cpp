@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2023 LG Electronics, Inc.
+// Copyright (c) 2013-2024 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -1867,7 +1867,8 @@ bool NotificationService::cb_removeAllNotification(LSHandle* lshandle, LSMessage
     JUtil::Error error;
 
     pbnjson::JValue request;
-    int displayId;
+
+    int displayId = 0;
     std::string errorText = "";
     pbnjson::JValue setCountParams = pbnjson::Object();
     std::string displayCategory;
