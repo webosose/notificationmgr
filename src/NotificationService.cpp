@@ -681,7 +681,7 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
             postToastCount.put("unreadCount", toastCountVector[displayId].unreadCount);
             postToastCount.put("totalCount", toastCountVector[displayId].readCount + toastCountVector[displayId].unreadCount);
         }
-        toastCountStatus = NotificationService::instance()->postToastCountNotification(postToastCount, staleMsg, persistentMsg, errText);
+        toastCountStatus = NotificationService::instance()->postToastCountNotification(std::move(postToastCount), staleMsg, persistentMsg, errText);
         // Check the SourceId exist in the App list.
         if (AppList::instance()->isAppExist(sourceId))
         {
@@ -729,7 +729,7 @@ bool NotificationService::cb_createToast(LSHandle* lshandle, LSMessage *msg, voi
     postCreateToast.put("action", action);
 
     // Post a message
-    success = NotificationService::instance()->postToastNotification(postCreateToast, staleMsg, persistentMsg, errText);
+    success = NotificationService::instance()->postToastNotification(std::move(postCreateToast), staleMsg, persistentMsg, errText);
 
 Done:
     pbnjson::JValue json = pbnjson::Object();
@@ -1210,12 +1210,12 @@ bool NotificationService::cb_createAlert(LSHandle* lshandle, LSMessage *msg, voi
 	data->alertId = alertId;
 	data->alertTitle = title;
 	data->alertMessage = message;
-	data->uriList = uriList;
+	data->uriList = std::move(uriList);
 	data->uriVerified = uri;
         const char *serviceName = NotificationService::instance()->getServiceName(msg);
         if (serviceName)
             data->serviceNameCreateAlert = serviceName;
-	data->postCreateAlert = postCreateAlert;
+	data->postCreateAlert = std::move(postCreateAlert);
 
 	std::string params = "{\"uri\": \"" + uri + "\", \"requester\": \"" + data->serviceNameCreateAlert + "\"}";
         if(!LSCall(NotificationService::instance()->getHandle(), "palm://com.palm.bus/isCallAllowed", params.c_str(), cb_createAlertIsAllowed, data, NULL, &lserror) && lserror.message)
@@ -1844,7 +1844,7 @@ Done:
         json.put("errorText", errText);
     }
 
-    std::string result = JUtil::jsonToString(json);
+    std::string result = JUtil::jsonToString(std::move(json));
     if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
     {
         return false;
@@ -1899,7 +1899,7 @@ bool NotificationService::cb_removeAllNotification(LSHandle* lshandle, LSMessage
         displayId = request["displayId"].asNumber<int>();
         LOG_DEBUG("Display ID: %d", displayId);
     }
-    LOG_DEBUG("Remove Payload: %s", JUtil::jsonToString(request).c_str());
+    LOG_DEBUG("Remove Payload: %s", JUtil::jsonToString(std::move(request)).c_str());
 
     postRemoveAllNotiMessage.put("removeAllNotiId", true);
     postRemoveAllNotiMessage.put("displayId", displayId);
@@ -1923,7 +1923,7 @@ Done:
         json.put("errorText", errText);
     }
 
-    std::string result = JUtil::jsonToString(json);
+    std::string result = JUtil::jsonToString(std::move(json));
     if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
     {
         return false;
@@ -2008,7 +2008,7 @@ Done:
     {
         json.put("errorText", errText);
 
-        std::string result = JUtil::jsonToString(json);
+        std::string result = JUtil::jsonToString(std::move(json));
         if(!LSMessageReply( lshandle, msg, result.c_str(), &lserror))
         {
             return false;
@@ -2176,7 +2176,7 @@ void NotificationService::processNotiMsgQueue()
     {
         NotificationService::instance()->postNotification(notiMsgQueue.front()->getPayLoad(),notiMsgQueue.front()->getRemove(),notiMsgQueue.front()->getRemoveAll());
         pbnjson::JValue notificationPayload = notiMsgQueue.front()->getPayLoad();
-        LOG_WARNING("notificationmgr", 0, "[%s:%d] notiMsgQueue = %s", __FUNCTION__, __LINE__, JUtil::jsonToString(notificationPayload).c_str());
+        LOG_WARNING("notificationmgr", 0, "[%s:%d] notiMsgQueue = %s", __FUNCTION__, __LINE__, JUtil::jsonToString(std::move(notificationPayload)).c_str());
         popNotiMsgQueue();
     }
 }
@@ -2189,7 +2189,7 @@ void NotificationService::processToastMsgQueue()
     {
         NotificationService::instance()->postToastNotification(toastMsgQueue.front(), false, false, errText);
         pbnjson::JValue toastPayload = toastMsgQueue.front();
-        LOG_DEBUG("processToastMsgQueue toastMsgQueue = %s", JUtil::jsonToString(toastPayload).c_str());
+        LOG_DEBUG("processToastMsgQueue toastMsgQueue = %s", JUtil::jsonToString( std::move(toastPayload)).c_str());
         toastMsgQueue.pop();
     }
 }
@@ -2343,7 +2343,7 @@ bool NotificationService::cb_setToastStatus(LSHandle *lshandle, LSMessage *msg, 
         status = json["readStatus"].asBool();
     }
 
-    success = History::instance()->setReadStatus(toastId, status);
+    success = History::instance()->setReadStatus(std::move(toastId), status);
 
     if(!success)
     {

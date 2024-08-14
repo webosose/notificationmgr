@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2019 LG Electronics, Inc.
+// Copyright (c) 2013-2024 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -93,7 +93,7 @@ bool AppList::cbAppMgrBusStatusNotification(LSHandle* lshandle, LSMessage *messa
 
 		//the application manager is on the bus...make a call to receive list of installed apps.
 		if (LSCall(NotificationService::instance()->getHandle(),"palm://com.webos.applicationManager/listApps",
-						JUtil::jsonToString(params).c_str(),
+						JUtil::jsonToString( std::move(params)).c_str(),
 						AppList::cbAppMgrAppList,NULL,NULL, &lserror) == false) {
 			 LOG_ERROR(MSGID_LISTAPPS_CALL_FAILED, 0, "ListApps call failed in %s", __PRETTY_FUNCTION__);
 		}
@@ -134,7 +134,7 @@ bool AppList::cbAppMgrAppList(LSHandle* lshandle, LSMessage *message, void *user
 		if (!app.isObject())
 			return false;
 
-		AppList::instance()->handleAppResponse(response["change"].asString(), app);
+		AppList::instance()->handleAppResponse(response["change"].asString(), std::move(app));
 	}
 	else
 		return false;

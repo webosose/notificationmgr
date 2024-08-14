@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2023 LG Electronics, Inc.
+// Copyright (c) 2013-2024 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -154,7 +154,7 @@ bool Settings::cbSystemSettingsStatusNotification(LSHandle* lshandle, LSMessage 
 
 		if (LSCall(NotificationService::instance()->getHandle(),
 			"palm://com.webos.settingsservice/getSystemSettings",
-			JUtil::jsonToString(jsonOption).c_str(),
+			JUtil::jsonToString(std::move(jsonOption)).c_str(),
 			Settings::cb_getSystemSettingForOption, NULL, NULL, &lserror) == false)
 		{
 			LOG_WARNING(MSGID_SETTINGS_GETSYSTEMSETTINGS_OPTION_FAILED, 1,
@@ -187,7 +187,7 @@ bool Settings::cb_getSystemSettingForPIN(LSHandle* lshandle, LSMessage *msg, voi
 	pincode = settings["systemPin"].asString();
 	LOG_DEBUG("cb_getSystemSettingForPIN pin - %s, %s in %s", pincode.c_str(), __func__, __FILE__ );
 
-	Settings::instance()->m_system_pincode = pincode;
+	Settings::instance()->m_system_pincode =  std::move(pincode);
 
 	return true;
 }
@@ -217,7 +217,7 @@ bool Settings::cb_getSystemSettingForOption(LSHandle* lshandle, LSMessage *msg, 
 		LOG_INFO(MSGID_SETTINGS_OPTION_COUNTRY, 1,
 			PMLOGKS("country", country.c_str()), " ");
 
-		Settings::instance()->m_system_country = country;
+		Settings::instance()->m_system_country = std::move(country);
 	}
 
 	if (settings.hasKey("storeMode"))

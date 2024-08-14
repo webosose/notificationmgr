@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2020 LG Electronics, Inc.
+// Copyright (c) 2013-2024 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -166,7 +166,7 @@ bool History::selectToastMessage(LSHandle* lshandle, const std::string& id, LSMe
                                                {"where", pbnjson::JArray{{{"prop", "displayId"}, {"op", "="}, {"val", display_id}}}}};
     find_query.put("query", toast_request);
     if (LSCallOneReply(lshandle, "palm://com.palm.db/find",
-                       JUtil::jsonToString(find_query).c_str(),
+                       JUtil::jsonToString(std::move(find_query)).c_str(),
                        History::cbDb8getToastResponse, this, NULL, &lserror) == false) {
                        LOG_WARNING(MSGID_SAVE_MSG_FAIL, 0, "Select Message to History table call failed in %s", __PRETTY_FUNCTION__ );
     }
@@ -579,7 +579,7 @@ Done:
         json.put("errorText", errText);
     }
 
-    std::string result = JUtil::jsonToString(json);
+    std::string result = JUtil::jsonToString(std::move(json));
     LOG_DEBUG("==== cbDb8getNotiResponse Payload ==== %s", result.c_str());
 
     if(!LSMessageReply( lshandle, getNotiReplyMsg, result.c_str(), &lserror))
@@ -714,7 +714,7 @@ Done:
         json.put("errorText", errText);
     }
 
-    std::string result = JUtil::jsonToString(json);
+    std::string result = JUtil::jsonToString( std::move(json));
     LOG_DEBUG("==== cbDb8getToastResponse Payload ==== %s", result.c_str());
 
     if(!LSMessageReply( lshandle, getToastReplyMsg, result.c_str(), &lserror))
@@ -896,7 +896,7 @@ Done:
         json.put("errorText", errText);
     }
 
-    std::string result = JUtil::jsonToString(json);
+    std::string result = JUtil::jsonToString(std::move(json));
     LOG_DEBUG("==== cbDb8getRemoteNotiResponse Payload ==== %s", result.c_str());
 
     if(!LSMessageReply( lshandle, getNotiReplyMsg, result.c_str(), &lserror))
@@ -944,7 +944,7 @@ bool History::resetUserNotifications(int displayId)
     remove_query.put("query", request);
 
     if (LSCallOneReply(NotificationService::instance()->getHandle(),"palm://com.palm.db/del",
-                       JUtil::jsonToString(remove_query).c_str(),
+                       JUtil::jsonToString( std::move(remove_query)).c_str(),
                        History::cbDb8Response,NULL,NULL, &lserror) == false) {
             LOG_WARNING(MSGID_PURGE_FAIL, 0,"PurgeAllData Db8 LS2 call failed in %s", __PRETTY_FUNCTION__ );
     }

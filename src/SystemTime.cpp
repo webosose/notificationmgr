@@ -1,4 +1,4 @@
-// Copyright (c) 2013-2018 LG Electronics, Inc.
+// Copyright (c) 2013-2024 LG Electronics, Inc.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -34,7 +34,7 @@ void SystemTime::startSync()
     LSErrorSafe lserror;
     if (!LSCall(NotificationService::instance()->getHandle(),
         "palm://com.palm.bus/signal/registerServerStatus",
-        JUtil::jsonToString(json).c_str(),
+        JUtil::jsonToString(std::move(json)).c_str(),
         SystemTime::cbRegisterServerStatus, this, NULL, &lserror))
     {
         LOG_WARNING(MSGID_SYSTEMTIME_REG_FAIL, 1, PMLOGKS("REASON", lserror.message), " ");
@@ -52,8 +52,8 @@ void SystemTime::setSync(bool sync, std::string time_source, int64_t utc_time)
     }
 
     m_isSynced = sync;
-    m_utc_time = utc_time;
-    m_time_source = time_source;
+    m_utc_time = std::move(utc_time);
+    m_time_source = std::move(time_source);
 
     sigSync(sync);
 }
@@ -88,7 +88,7 @@ bool SystemTime::cbRegisterServerStatus(LSHandle *lshandle, LSMessage *message, 
         LSErrorSafe lserror;
         if (!LSCall(NotificationService::instance()->getHandle(),
             "palm://com.palm.systemservice/time/getSystemTime",
-            JUtil::jsonToString(param).c_str(),
+            JUtil::jsonToString(std::move(param)).c_str(),
             SystemTime::cbGetSystemTime, user_data, NULL, &lserror))
         {
             LOG_WARNING(MSGID_SYSTEMTIME_GETTIME_FAIL, 1, PMLOGKS("REASON", lserror.message), " ");
@@ -122,7 +122,7 @@ bool SystemTime::cbGetSystemTime(LSHandle *lshandle, LSMessage *message, void *u
         return true;
     }
 
-    systemTime->setSync(true, timeSource, utc_time);
+    systemTime->setSync(true, std::move(timeSource), utc_time);
 
     return true;
 }
